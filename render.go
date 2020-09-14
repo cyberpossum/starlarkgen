@@ -16,6 +16,7 @@ const (
 	indentType
 	tokenType
 	stringType
+	extraIndentType
 )
 
 type item struct {
@@ -23,17 +24,18 @@ type item struct {
 	token     syntax.Token
 	expr      syntax.Expr
 	stmts     []syntax.Stmt
-	addIndent bool
+	addIndent int
 	value     string
 	valueDesc string
 }
 
 var (
-	quoteItem   = item{itemType: stringType, value: "\"", valueDesc: "quote"}
-	spaceItem   = item{itemType: stringType, value: " ", valueDesc: "space"}
-	colonItem   = item{itemType: tokenType, token: syntax.COLON, valueDesc: "COLON"}
-	indentItem  = item{itemType: indentType}
-	newlineItem = item{itemType: tokenType, token: syntax.NEWLINE, valueDesc: "NEWLINE"}
+	quoteItem       = item{itemType: stringType, value: "\"", valueDesc: "quote"}
+	spaceItem       = item{itemType: stringType, value: " ", valueDesc: "space"}
+	colonItem       = item{itemType: tokenType, token: syntax.COLON, valueDesc: "COLON"}
+	indentItem      = item{itemType: indentType}
+	extraIndentItem = item{itemType: extraIndentType}
+	newlineItem     = item{itemType: tokenType, token: syntax.NEWLINE, valueDesc: "NEWLINE"}
 
 	commaSpace = []item{tokenItem(syntax.COMMA, "COMMA"), spaceItem}
 )
@@ -42,8 +44,16 @@ func exprItem(expr syntax.Expr, desc string) item {
 	return item{itemType: exprType, expr: expr, valueDesc: desc}
 }
 
+func exprItemIndent(expr syntax.Expr, desc string) item {
+	return item{itemType: exprType, expr: expr, valueDesc: desc, addIndent: 1}
+}
+
 func stmtsItem(stmts []syntax.Stmt, desc string, addIndent bool) item {
-	return item{itemType: stmtsType, stmts: stmts, valueDesc: desc, addIndent: addIndent}
+	aIndent := 0
+	if addIndent {
+		aIndent = 1
+	}
+	return item{itemType: stmtsType, stmts: stmts, valueDesc: desc, addIndent: aIndent}
 }
 
 func stringItem(value, desc string) item {
@@ -58,21 +68,29 @@ func render(out io.StringWriter, errPrefix string, opts *outputOpts, items ...it
 	for _, i := range items {
 		switch i.itemType {
 		case exprType:
-			if err := expr(out, i.expr, opts); err != nil {
+			expOpts := opts
+			if i.addIndent > 0 {
+				expOpts = expOpts.addDepth(i.addIndent)
+			}
+			if err := expr(out, i.expr, expOpts); err != nil {
 				return fmt.Errorf("%s %s: %w", errPrefix, i.valueDesc, err)
 			}
 		case stmtsType:
 			stOpts := opts
-			if i.addIndent {
-				stOpts = stOpts.addDepth(1)
+			if i.addIndent > 0 {
+				stOpts = stOpts.addDepth(i.addIndent)
 			}
 			for ii, st := range i.stmts {
 				if err := stmt(out, st, stOpts); err != nil {
 					return fmt.Errorf("%s, rendering %s statement index %d: %w", errPrefix, i.valueDesc, ii, err)
 				}
 			}
-		case indentType:
-			if _, err := out.WriteString(strings.Repeat(opts.indent, opts.depth)); err != nil {
+		case indentType, extraIndentType:
+			depth := opts.depth
+			if i.itemType == extraIndentType {
+				depth++
+			}
+			if _, err := out.WriteString(strings.Repeat(opts.indent, depth)); err != nil {
 				return fmt.Errorf("%s indent: %w", errPrefix, err)
 			}
 		case stringType:

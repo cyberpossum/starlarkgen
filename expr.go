@@ -10,6 +10,69 @@ import (
 	"go.starlark.net/syntax"
 )
 
+func exprSequence(source []syntax.Expr, ro renderOption) []item {
+	var (
+		items        []item
+		sep          []item
+		prefixIndent bool
+		lastComma    bool
+		sourceLen    = len(source)
+	)
+
+	switch ro.multiLineType() {
+	case multiLine:
+		prefixIndent = sourceLen > 0
+	case multiLineMultiple:
+		prefixIndent = sourceLen > 1
+	}
+	switch ro.commaType() {
+	case alwaysLastComma:
+		lastComma = sourceLen > 0
+	case lastCommaTwoAndMore:
+		lastComma = sourceLen > 1
+	}
+
+	if prefixIndent {
+		items = append(items,
+			newlineItem,
+			extraIndentItem,
+		)
+	}
+
+	for i, arg := range source {
+		items = append(items,
+			sep...,
+		)
+		if prefixIndent {
+			items = append(items,
+				exprItemIndent(arg, fmt.Sprintf("element %d", i)),
+			)
+			sep = []item{tokenItem(syntax.COMMA, "COMMA"), newlineItem, extraIndentItem}
+		} else {
+			items = append(items,
+				exprItem(arg, fmt.Sprintf("element %d", i)),
+			)
+			sep = commaSpace
+		}
+	}
+
+	// add last comma if respective option is set
+	if lastComma {
+		items = append(items,
+			tokenItem(syntax.COMMA, "COMMA"),
+		)
+	}
+	// indent and newline for multiline
+	if prefixIndent {
+		items = append(items,
+			newlineItem,
+			indentItem,
+		)
+	}
+
+	return items
+}
+
 func binaryExpr(out io.StringWriter, input *syntax.BinaryExpr, opts *outputOpts) error {
 	if input == nil {
 		return errors.New("rendering binary expression: nil input")
@@ -48,16 +111,8 @@ func callExpr(out io.StringWriter, input *syntax.CallExpr, opts *outputOpts) err
 		tokenItem(syntax.LPAREN, "LPAREN"),
 	}
 
-	var sep []item
-	for i, arg := range input.Args {
-		items = append(items,
-			sep...,
-		)
-		items = append(items,
-			exprItem(arg, fmt.Sprintf("argument %d", i)),
-		)
-		sep = commaSpace
-	}
+	items = append(items, exprSequence(input.Args, renderOption(opts.callOption))...)
+
 	items = append(items,
 		tokenItem(syntax.RPAREN, "RPAREN"),
 	)
@@ -148,23 +203,19 @@ func dictExpr(out io.StringWriter, input *syntax.DictExpr, opts *outputOpts) err
 		return errors.New("rendering dict expression: nil input")
 	}
 
+	// validate the dict elements
+	for _, elem := range input.List {
+		if _, ok := elem.(*syntax.DictEntry); !ok {
+			return fmt.Errorf("expected *syntax.DictEntry, got %T in dictExpr", elem)
+		}
+	}
+
 	items := []item{
 		tokenItem(syntax.LBRACE, "LBRACE"),
 	}
 
-	var sep []item
-	for i, elem := range input.List {
-		if _, ok := elem.(*syntax.DictEntry); !ok {
-			return fmt.Errorf("expected *syntax.DictEntry, got %T in dictExpr", elem)
-		}
-		items = append(items,
-			sep...,
-		)
-		items = append(items,
-			exprItem(elem, fmt.Sprintf("element %d", i)),
-		)
-		sep = commaSpace
-	}
+	items = append(items, exprSequence(input.List, renderOption(opts.dictOption))...)
+
 	items = append(items, tokenItem(syntax.RBRACE, "RBRACE"))
 
 	return render(out, "rendering dict expression", opts, items...)
@@ -212,16 +263,7 @@ func listExpr(out io.StringWriter, input *syntax.ListExpr, opts *outputOpts) err
 		tokenItem(syntax.LBRACK, "LBRACK"),
 	}
 
-	var sep []item
-	for i, elem := range input.List {
-		items = append(items,
-			sep...,
-		)
-		items = append(items,
-			exprItem(elem, fmt.Sprintf("element %d", i)),
-		)
-		sep = commaSpace
-	}
+	items = append(items, exprSequence(input.List, renderOption(opts.listOption))...)
 
 	items = append(items, tokenItem(syntax.RBRACK, "RBRACK"))
 	return render(out, "rendering list expression", opts, items...)
@@ -311,18 +353,7 @@ func tupleExpr(out io.StringWriter, input *syntax.TupleExpr, opts *outputOpts) e
 		return errors.New("rendering tuple expression: nil input")
 	}
 
-	items := make([]item, 0, len(input.List)*2-1)
-	var sep []item
-	for i, elem := range input.List {
-		items = append(items,
-			sep...,
-		)
-		items = append(items,
-			exprItem(elem, fmt.Sprintf("element %d", i)),
-		)
-		sep = commaSpace
-	}
-	return render(out, "rendering tuple expression", opts, items...)
+	return render(out, "rendering tuple expression", opts, exprSequence(input.List, renderOption(opts.tupleOption))...)
 }
 
 func unaryExpr(out io.StringWriter, input *syntax.UnaryExpr, opts *outputOpts) error {

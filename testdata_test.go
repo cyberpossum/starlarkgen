@@ -9,8 +9,15 @@ import (
 )
 
 var testSources = map[string][]Option{
-	"testdata/test_input_1.star": {WithSpaceEqBinary(true)},
 	"testdata/import.star":       nil,
+	"testdata/test_input_1.star": {WithSpaceEqBinary(true)},
+	"testdata/test_input_2.star": {
+		WithSpaceEqBinary(true),
+		WithCallOption(CallOptionMultilineMultipleCommaTwoAndMore),
+		WithDictOption(DictOptionMultilineMultipleComma),
+		WithListOption(ListOptionMultilineMultipleComma),
+		WithTupleOption(TupleOptionSingleLineComma),
+	},
 }
 
 func Test_testdata(t *testing.T) {
@@ -37,7 +44,6 @@ func Test_testdata(t *testing.T) {
 				sb.WriteString(d)
 				sep = "\n"
 			}
-
 			if got := sb.String(); want != got {
 				t.Errorf("output mismatch, want %q, got %q", want, got)
 			}

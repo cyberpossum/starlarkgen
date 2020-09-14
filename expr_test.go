@@ -1,6 +1,7 @@
 package starlarkgen
 
 import (
+	"fmt"
 	"math/big"
 	"strings"
 	"testing"
@@ -393,6 +394,466 @@ func Test_expr(t *testing.T) {
 				t.Errorf("expected %q, got %q and %q from expr()", tt.want, got, gotExpr)
 			}
 		})
+	}
+}
+
+func Test_WithCallOption_invalid(t *testing.T) {
+	tests := []CallOption{
+		callOptionMax,
+		callOptionMax + 1,
+		CallOption(0xff),
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("List option %v failure", tt), func(t *testing.T) {
+			if opts, err := getOutputOpts(WithCallOption(tt)); opts != nil || err == nil {
+				t.Errorf("expected nil options and error, got %v and %v", opts, err)
+			}
+		})
+	}
+}
+func Test_WithDictOption_invalid(t *testing.T) {
+	tests := []DictOption{
+		dictOptionMax,
+		dictOptionMax + 1,
+		DictOption(0xff),
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("Dict option %v failure", tt), func(t *testing.T) {
+			if opts, err := getOutputOpts(WithDictOption(tt)); opts != nil || err == nil {
+				t.Errorf("expected nil options and error, got %v and %v", opts, err)
+			}
+		})
+	}
+}
+
+func Test_WithListOption_invalid(t *testing.T) {
+	tests := []ListOption{
+		listOptionMax,
+		listOptionMax + 1,
+		ListOption(0xff),
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("List option %v failure", tt), func(t *testing.T) {
+			if opts, err := getOutputOpts(WithListOption(tt)); opts != nil || err == nil {
+				t.Errorf("expected nil options and error, got %v and %v", opts, err)
+			}
+		})
+	}
+}
+
+func Test_WithTupleOption_invalid(t *testing.T) {
+	tests := []TupleOption{
+		tupleOptionMax,
+		tupleOptionMax + 1,
+		TupleOption(0xff),
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("List option %v failure", tt), func(t *testing.T) {
+			if opts, err := getOutputOpts(WithTupleOption(tt)); opts != nil || err == nil {
+				t.Errorf("expected nil options and error, got %v and %v", opts, err)
+			}
+		})
+	}
+}
+
+func Test_withCallOption(t *testing.T) {
+	testMatrix := map[string]syntax.Expr{
+		"single": &syntax.CallExpr{
+			Fn:   &syntax.Ident{Name: "some_func"},
+			Args: []syntax.Expr{&syntax.Ident{Name: "foo"}},
+		},
+		"multi": &syntax.CallExpr{
+			Fn: &syntax.Ident{Name: "some_func"},
+			Args: []syntax.Expr{
+				&syntax.Ident{Name: "foo"},
+				&syntax.Literal{Value: 1},
+				&syntax.Ident{Name: "bar"},
+				&syntax.Literal{Value: 2},
+				&syntax.Ident{Name: "test"},
+				&syntax.Literal{Value: 3},
+			},
+		},
+	}
+
+	tests := []struct {
+		withCallOption CallOption
+		want           map[string]string
+	}{
+		{
+			withCallOption: CallOptionSingleLine,
+			want: map[string]string{
+				"single": "some_func(foo)",
+				"multi":  "some_func(foo, 1, bar, 2, test, 3)",
+			},
+		},
+		{
+			withCallOption: CallOptionSingleLineComma,
+			want: map[string]string{
+				"single": "some_func(foo,)",
+				"multi":  "some_func(foo, 1, bar, 2, test, 3,)",
+			},
+		},
+		{
+			withCallOption: CallOptionSingleLineCommaTwoAndMore,
+			want: map[string]string{
+				"single": "some_func(foo)",
+				"multi":  "some_func(foo, 1, bar, 2, test, 3,)",
+			},
+		},
+		{
+			withCallOption: CallOptionMultiline,
+			want: map[string]string{
+				"single": "some_func(\n++foo\n+)",
+				"multi":  "some_func(\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3\n+)",
+			},
+		},
+		{
+			withCallOption: CallOptionMultilineComma,
+			want: map[string]string{
+				"single": "some_func(\n++foo,\n+)",
+				"multi":  "some_func(\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3,\n+)",
+			},
+		},
+		{
+			withCallOption: CallOptionMultilineCommaTwoAndMore,
+			want: map[string]string{
+				"single": "some_func(\n++foo\n+)",
+				"multi":  "some_func(\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3,\n+)",
+			},
+		},
+		{
+			withCallOption: CallOptionMultilineMultiple,
+			want: map[string]string{
+				"single": "some_func(foo)",
+				"multi":  "some_func(\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3\n+)",
+			},
+		},
+		{
+			withCallOption: CallOptionMultilineMultipleComma,
+			want: map[string]string{
+				"single": "some_func(foo,)",
+				"multi":  "some_func(\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3,\n+)",
+			},
+		},
+		{
+			withCallOption: CallOptionMultilineMultipleCommaTwoAndMore,
+			want: map[string]string{
+				"single": "some_func(foo)",
+				"multi":  "some_func(\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3,\n+)",
+			},
+		},
+	}
+	for _, tt := range tests {
+		for name, value := range testMatrix {
+			opts := []Option{WithCallOption(tt.withCallOption), WithIndent("+"), WithDepth(1)}
+			t.Run(fmt.Sprintf("empty, multiline: %#v", tt.withCallOption), func(t *testing.T) {
+				// empty call is always rendered as "some_func()"
+				if got, err := StarlarkExpr(&syntax.CallExpr{Fn: &syntax.Ident{Name: "some_func"}}, opts...); err != nil || got != "some_func()" {
+					t.Errorf("expected nil error and \"some_func()\", got %v and %q", err, got)
+				}
+			})
+			t.Run(fmt.Sprintf("%v, multiline: %#v", name, tt.withCallOption), func(t *testing.T) {
+				if got, err := StarlarkExpr(value, opts...); err != nil || got != tt.want[name] {
+					t.Errorf("expected nil error and %q, got %v and %q", tt.want[name], err, got)
+				}
+			})
+		}
+	}
+}
+
+func Test_withDictOption(t *testing.T) {
+	testMatrix := map[string]syntax.Expr{
+		"single": &syntax.DictExpr{List: []syntax.Expr{&syntax.DictEntry{Key: &syntax.Ident{Name: "foo"}, Value: &syntax.Literal{Value: 1}}}},
+		"multi": &syntax.DictExpr{List: []syntax.Expr{
+			&syntax.DictEntry{Key: &syntax.Ident{Name: "foo"}, Value: &syntax.Literal{Value: 1}},
+			&syntax.DictEntry{Key: &syntax.Ident{Name: "bar"}, Value: &syntax.Literal{Value: 2}},
+			&syntax.DictEntry{Key: &syntax.Ident{Name: "test"}, Value: &syntax.Literal{Value: 3}},
+		}},
+	}
+
+	tests := []struct {
+		withDictOption DictOption
+		want           map[string]string
+	}{
+		{
+			withDictOption: DictOptionSingleLine,
+			want: map[string]string{
+				"single": "{foo: 1}",
+				"multi":  "{foo: 1, bar: 2, test: 3}",
+			},
+		},
+		{
+			withDictOption: DictOptionSingleLineComma,
+			want: map[string]string{
+				"single": "{foo: 1,}",
+				"multi":  "{foo: 1, bar: 2, test: 3,}",
+			},
+		},
+		{
+			withDictOption: DictOptionSingleLineCommaTwoAndMore,
+			want: map[string]string{
+				"single": "{foo: 1}",
+				"multi":  "{foo: 1, bar: 2, test: 3,}",
+			},
+		},
+		{
+			withDictOption: DictOptionMultiline,
+			want: map[string]string{
+				"single": "{\n++foo: 1\n+}",
+				"multi":  "{\n++foo: 1,\n++bar: 2,\n++test: 3\n+}",
+			},
+		},
+		{
+			withDictOption: DictOptionMultilineComma,
+			want: map[string]string{
+				"single": "{\n++foo: 1,\n+}",
+				"multi":  "{\n++foo: 1,\n++bar: 2,\n++test: 3,\n+}",
+			},
+		},
+		{
+			withDictOption: DictOptionMultilineCommaTwoAndMore,
+			want: map[string]string{
+				"single": "{\n++foo: 1\n+}",
+				"multi":  "{\n++foo: 1,\n++bar: 2,\n++test: 3,\n+}",
+			},
+		},
+		{
+			withDictOption: DictOptionMultilineMultiple,
+			want: map[string]string{
+				"single": "{foo: 1}",
+				"multi":  "{\n++foo: 1,\n++bar: 2,\n++test: 3\n+}",
+			},
+		},
+		{
+			withDictOption: DictOptionMultilineMultipleComma,
+			want: map[string]string{
+				"single": "{foo: 1,}",
+				"multi":  "{\n++foo: 1,\n++bar: 2,\n++test: 3,\n+}",
+			},
+		},
+		{
+			withDictOption: DictOptionMultilineMultipleCommaTwoAndMore,
+			want: map[string]string{
+				"single": "{foo: 1}",
+				"multi":  "{\n++foo: 1,\n++bar: 2,\n++test: 3,\n+}",
+			},
+		},
+	}
+	for _, tt := range tests {
+		for name, value := range testMatrix {
+			opts := []Option{WithDictOption(tt.withDictOption), WithIndent("+"), WithDepth(1)}
+			t.Run(fmt.Sprintf("empty, multiline: %#v", tt.withDictOption), func(t *testing.T) {
+				// empty dict is always rendered as "{}"
+				if got, err := StarlarkExpr(&syntax.DictExpr{}, opts...); err != nil || got != "{}" {
+					t.Errorf("expected nil error and \"{}\", got %v and %q", err, got)
+				}
+			})
+			t.Run(fmt.Sprintf("%v, multiline: %#v", name, tt.withDictOption), func(t *testing.T) {
+				if got, err := StarlarkExpr(value, opts...); err != nil || got != tt.want[name] {
+					t.Errorf("expected nil error and %q, got %v and %q", tt.want[name], err, got)
+				}
+			})
+		}
+	}
+}
+
+func Test_withListOption(t *testing.T) {
+	testMatrix := map[string]syntax.Expr{
+		"single": &syntax.ListExpr{List: []syntax.Expr{&syntax.Ident{Name: "foo"}}},
+		"multi": &syntax.ListExpr{List: []syntax.Expr{
+			&syntax.Ident{Name: "foo"},
+			&syntax.Literal{Value: 1},
+			&syntax.Ident{Name: "bar"},
+			&syntax.Literal{Value: 2},
+			&syntax.Ident{Name: "test"},
+			&syntax.Literal{Value: 3},
+		}},
+	}
+
+	tests := []struct {
+		withListOption ListOption
+		want           map[string]string
+	}{
+		{
+			withListOption: ListOptionSingleLine,
+			want: map[string]string{
+				"single": "[foo]",
+				"multi":  "[foo, 1, bar, 2, test, 3]",
+			},
+		},
+		{
+			withListOption: ListOptionSingleLineComma,
+			want: map[string]string{
+				"single": "[foo,]",
+				"multi":  "[foo, 1, bar, 2, test, 3,]",
+			},
+		},
+		{
+			withListOption: ListOptionSingleLineCommaTwoAndMore,
+			want: map[string]string{
+				"single": "[foo]",
+				"multi":  "[foo, 1, bar, 2, test, 3,]",
+			},
+		},
+		{
+			withListOption: ListOptionMultiline,
+			want: map[string]string{
+				"single": "[\n++foo\n+]",
+				"multi":  "[\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3\n+]",
+			},
+		},
+		{
+			withListOption: ListOptionMultilineComma,
+			want: map[string]string{
+				"single": "[\n++foo,\n+]",
+				"multi":  "[\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3,\n+]",
+			},
+		},
+		{
+			withListOption: ListOptionMultilineCommaTwoAndMore,
+			want: map[string]string{
+				"single": "[\n++foo\n+]",
+				"multi":  "[\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3,\n+]",
+			},
+		},
+		{
+			withListOption: ListOptionMultilineMultiple,
+			want: map[string]string{
+				"single": "[foo]",
+				"multi":  "[\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3\n+]",
+			},
+		},
+		{
+			withListOption: ListOptionMultilineMultipleComma,
+			want: map[string]string{
+				"single": "[foo,]",
+				"multi":  "[\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3,\n+]",
+			},
+		},
+		{
+			withListOption: ListOptionMultilineMultipleCommaTwoAndMore,
+			want: map[string]string{
+				"single": "[foo]",
+				"multi":  "[\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3,\n+]",
+			},
+		},
+	}
+	for _, tt := range tests {
+		for name, value := range testMatrix {
+			opts := []Option{WithListOption(tt.withListOption), WithIndent("+"), WithDepth(1)}
+			t.Run(fmt.Sprintf("empty, multiline: %#v", tt.withListOption), func(t *testing.T) {
+				// empty list is always rendered as "[]"
+				if got, err := StarlarkExpr(&syntax.ListExpr{}, opts...); err != nil || got != "[]" {
+					t.Errorf("expected nil error and \"[]\", got %v and %q", err, got)
+				}
+			})
+			t.Run(fmt.Sprintf("%v, multiline: %#v", name, tt.withListOption), func(t *testing.T) {
+				if got, err := StarlarkExpr(value, opts...); err != nil || got != tt.want[name] {
+					t.Errorf("expected nil error and %q, got %v and %q", tt.want[name], err, got)
+				}
+			})
+		}
+	}
+}
+
+func Test_withTupleOption(t *testing.T) {
+	testMatrix := map[string]syntax.Expr{
+		"single": &syntax.ParenExpr{X: &syntax.TupleExpr{List: []syntax.Expr{&syntax.Ident{Name: "foo"}}}},
+		"multi": &syntax.ParenExpr{
+			X: &syntax.TupleExpr{List: []syntax.Expr{
+				&syntax.Ident{Name: "foo"},
+				&syntax.Literal{Value: 1},
+				&syntax.Ident{Name: "bar"},
+				&syntax.Literal{Value: 2},
+				&syntax.Ident{Name: "test"},
+				&syntax.Literal{Value: 3},
+			}},
+		},
+	}
+
+	tests := []struct {
+		withTupleOption TupleOption
+		want            map[string]string
+	}{
+		{
+			withTupleOption: TupleOptionSingleLine,
+			want: map[string]string{
+				"single": "(foo)",
+				"multi":  "(foo, 1, bar, 2, test, 3)",
+			},
+		},
+		{
+			withTupleOption: TupleOptionSingleLineComma,
+			want: map[string]string{
+				"single": "(foo,)",
+				"multi":  "(foo, 1, bar, 2, test, 3,)",
+			},
+		},
+		{
+			withTupleOption: TupleOptionSingleLineCommaTwoAndMore,
+			want: map[string]string{
+				"single": "(foo)",
+				"multi":  "(foo, 1, bar, 2, test, 3,)",
+			},
+		},
+		{
+			withTupleOption: TupleOptionMultiline,
+			want: map[string]string{
+				"single": "(\n++foo\n+)",
+				"multi":  "(\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3\n+)",
+			},
+		},
+		{
+			withTupleOption: TupleOptionMultilineComma,
+			want: map[string]string{
+				"single": "(\n++foo,\n+)",
+				"multi":  "(\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3,\n+)",
+			},
+		},
+		{
+			withTupleOption: TupleOptionMultilineCommaTwoAndMore,
+			want: map[string]string{
+				"single": "(\n++foo\n+)",
+				"multi":  "(\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3,\n+)",
+			},
+		},
+		{
+			withTupleOption: TupleOptionMultilineMultiple,
+			want: map[string]string{
+				"single": "(foo)",
+				"multi":  "(\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3\n+)",
+			},
+		},
+		{
+			withTupleOption: TupleOptionMultilineMultipleComma,
+			want: map[string]string{
+				"single": "(foo,)",
+				"multi":  "(\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3,\n+)",
+			},
+		},
+		{
+			withTupleOption: TupleOptionMultilineMultipleCommaTwoAndMore,
+			want: map[string]string{
+				"single": "(foo)",
+				"multi":  "(\n++foo,\n++1,\n++bar,\n++2,\n++test,\n++3,\n+)",
+			},
+		},
+	}
+	for _, tt := range tests {
+		for name, value := range testMatrix {
+			opts := []Option{WithTupleOption(tt.withTupleOption), WithIndent("+"), WithDepth(1)}
+			t.Run(fmt.Sprintf("empty, multiline: %#v", tt.withTupleOption), func(t *testing.T) {
+				// empty tuple is always rendered as "()"
+				if got, err := StarlarkExpr(&syntax.ParenExpr{X: &syntax.TupleExpr{}}, opts...); err != nil || got != "()" {
+					t.Errorf("expected nil error and \"()\", got %v and %q", err, got)
+				}
+			})
+			t.Run(fmt.Sprintf("%v, multiline: %#v", name, tt.withTupleOption), func(t *testing.T) {
+				if got, err := StarlarkExpr(value, opts...); err != nil || got != tt.want[name] {
+					t.Errorf("expected nil error and %q, got %v and %q", tt.want[name], err, got)
+				}
+			})
+		}
 	}
 }
 
