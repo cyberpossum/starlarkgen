@@ -64,7 +64,7 @@ func Test_stmtsItem(t *testing.T) {
 			stmts: []syntax.Stmt{&syntax.BranchStmt{Token: syntax.PASS}},
 			want: item{
 				itemType:  stmtsType,
-				addIndent: false,
+				addIndent: 0,
 				stmts:     []syntax.Stmt{&syntax.BranchStmt{Token: syntax.PASS}},
 				valueDesc: "no indent",
 			},
@@ -75,7 +75,7 @@ func Test_stmtsItem(t *testing.T) {
 			addIndent: true,
 			want: item{
 				itemType:  stmtsType,
-				addIndent: true,
+				addIndent: 1,
 				stmts:     []syntax.Stmt{&syntax.BranchStmt{Token: syntax.PASS}},
 				valueDesc: "with indent",
 			},
