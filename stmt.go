@@ -58,14 +58,14 @@ func defStmt(out io.StringWriter, input *syntax.DefStmt, opts *outputOpts) error
 		return errors.New("rendering def statement: nil input")
 	}
 
-	items := []item{
+	items := []*item{
 		indentItem,
 		tokenItem(syntax.DEF, "DEF"),
 		spaceItem,
 		exprItem(input.Name, "Name"),
 		tokenItem(syntax.LPAREN, "LPAREN"),
 	}
-	var sep []item
+	var sep []*item
 	for i, param := range input.Params {
 		items = append(items,
 			sep...)
@@ -106,7 +106,7 @@ func exprStmt(out io.StringWriter, input *syntax.ExprStmt, opts *outputOpts) err
 			}
 
 			lines := strings.Split(strings.ReplaceAll(strValue, `"""`, `\"\"\"`), "\n")
-			items := []item{
+			items := []*item{
 				indentItem,
 				quoteItem,
 				quoteItem,
@@ -175,7 +175,7 @@ func ifStmt(out io.StringWriter, input *syntax.IfStmt, opts *outputOpts) error {
 		return errors.New("rendering if statement: nil input")
 	}
 
-	items := []item{
+	items := []*item{
 		indentItem,
 		tokenItem(syntax.IF, "IF"),
 		spaceItem,
@@ -205,7 +205,7 @@ func loadStmt(out io.StringWriter, input *syntax.LoadStmt, opts *outputOpts) err
 	if len(input.From) != len(input.To) {
 		return fmt.Errorf("rendering load statement, lengths mismatch, From: %d, To: %d", len(input.From), len(input.To))
 	}
-	items := []item{
+	items := []*item{
 		indentItem,
 		tokenItem(syntax.LOAD, "LOAD"),
 		tokenItem(syntax.LPAREN, "LPAREN"),
@@ -251,7 +251,7 @@ func returnStmt(out io.StringWriter, input *syntax.ReturnStmt, opts *outputOpts)
 		return errors.New("rendering return statement: nil input")
 	}
 
-	items := []item{
+	items := []*item{
 		indentItem,
 		tokenItem(syntax.RETURN, "RETURN"),
 	}
