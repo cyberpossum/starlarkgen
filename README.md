@@ -1,4 +1,6 @@
 ![Go](https://github.com/cyberpossum/starlarkgen/workflows/Go/badge.svg)
+[![Documentation](https://godoc.org/github.com/cyberpossum/starlarkgen?status.svg)](http://godoc.org/github.com/cyberpossum/starlarkgen)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/cyberpossum/starlarkgen)](https://pkg.go.dev/github.com/cyberpossum/starlarkgen)
 
 # starlarkgen
 
