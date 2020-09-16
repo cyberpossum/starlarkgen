@@ -17,7 +17,7 @@ func (f writeStringFunc) WriteString(s string) (int, error) {
 }
 
 func Test_exprItem(t *testing.T) {
-	want := item{
+	want := &item{
 		itemType:  exprType,
 		expr:      &syntax.Ident{Name: "foo"},
 		valueDesc: "test desc",
@@ -29,7 +29,7 @@ func Test_exprItem(t *testing.T) {
 }
 
 func Test_stringItem(t *testing.T) {
-	want := item{
+	want := &item{
 		itemType:  stringType,
 		value:     "foo",
 		valueDesc: "test desc",
@@ -41,7 +41,7 @@ func Test_stringItem(t *testing.T) {
 }
 
 func Test_tokenItem(t *testing.T) {
-	want := item{
+	want := &item{
 		itemType:  tokenType,
 		token:     syntax.PASS,
 		valueDesc: "test desc",
@@ -57,12 +57,12 @@ func Test_stmtsItem(t *testing.T) {
 		name      string
 		stmts     []syntax.Stmt
 		addIndent bool
-		want      item
+		want      *item
 	}{
 		{
 			name:  "no indent",
 			stmts: []syntax.Stmt{&syntax.BranchStmt{Token: syntax.PASS}},
-			want: item{
+			want: &item{
 				itemType:  stmtsType,
 				addIndent: 0,
 				stmts:     []syntax.Stmt{&syntax.BranchStmt{Token: syntax.PASS}},
@@ -73,7 +73,7 @@ func Test_stmtsItem(t *testing.T) {
 			name:      "with indent",
 			stmts:     []syntax.Stmt{&syntax.BranchStmt{Token: syntax.PASS}},
 			addIndent: true,
-			want: item{
+			want: &item{
 				itemType:  stmtsType,
 				addIndent: 1,
 				stmts:     []syntax.Stmt{&syntax.BranchStmt{Token: syntax.PASS}},
@@ -95,7 +95,7 @@ func Test_render(t *testing.T) {
 	tests := []struct {
 		name   string
 		opts   []Option
-		items  []item
+		items  []*item
 		writer writeStringFunc
 
 		wantErr string
@@ -106,28 +106,33 @@ func Test_render(t *testing.T) {
 		},
 		{
 			name:    "unsupported type",
-			items:   []item{{}},
+			items:   []*item{{}},
 			wantErr: "test unsupported type: item type 0 is not supported in render",
 		},
 		{
+			name:    "nil element in sequence",
+			items:   []*item{indentItem, spaceItem, nil, spaceItem, indentItem},
+			wantErr: "nil item in render, errPrefix: test nil element in sequence",
+		},
+		{
 			name:  "indent at zero level",
-			items: []item{indentItem},
+			items: []*item{indentItem},
 		},
 		{
 			name:  "indent",
-			items: []item{indentItem},
+			items: []*item{indentItem},
 			want:  "    ",
 			opts:  []Option{WithDepth(1)},
 		},
 		{
 			name:  "indent, custom",
-			items: []item{indentItem},
+			items: []*item{indentItem},
 			want:  "\t\t",
 			opts:  []Option{WithDepth(2), WithIndent("\t")},
 		},
 		{
 			name:  "error writing indent",
-			items: []item{indentItem},
+			items: []*item{indentItem},
 			opts:  []Option{WithDepth(1)},
 			writer: func(string) (int, error) {
 				return 0, testError
@@ -136,17 +141,17 @@ func Test_render(t *testing.T) {
 		},
 		{
 			name:  "expression",
-			items: []item{exprItem(&syntax.Ident{Name: "foo"}, "FOO")},
+			items: []*item{exprItem(&syntax.Ident{Name: "foo"}, "FOO")},
 			want:  "foo",
 		},
 		{
 			name:    "expression with rendering error",
-			items:   []item{exprItem(&syntax.LambdaExpr{}, "FOO")},
+			items:   []*item{exprItem(&syntax.LambdaExpr{}, "FOO")},
 			wantErr: "test expression with rendering error FOO: type *syntax.LambdaExpr is not supported",
 		},
 		{
 			name: "statements, no added indent",
-			items: []item{stmtsItem([]syntax.Stmt{
+			items: []*item{stmtsItem([]syntax.Stmt{
 				&syntax.BranchStmt{Token: syntax.PASS},
 				&syntax.BranchStmt{Token: syntax.PASS},
 			}, "STMTS", false)},
@@ -154,7 +159,7 @@ func Test_render(t *testing.T) {
 		},
 		{
 			name: "statements, added indent",
-			items: []item{stmtsItem([]syntax.Stmt{
+			items: []*item{stmtsItem([]syntax.Stmt{
 				&syntax.BranchStmt{Token: syntax.PASS},
 				&syntax.BranchStmt{Token: syntax.PASS},
 			}, "STMTS", true)},
@@ -162,7 +167,7 @@ func Test_render(t *testing.T) {
 		},
 		{
 			name: "statements, failure",
-			items: []item{stmtsItem([]syntax.Stmt{
+			items: []*item{stmtsItem([]syntax.Stmt{
 				&syntax.BranchStmt{Token: syntax.PASS},
 				&syntax.BranchStmt{Token: syntax.PASS},
 				&syntax.ExprStmt{X: &syntax.LambdaExpr{}},
@@ -171,12 +176,12 @@ func Test_render(t *testing.T) {
 		},
 		{
 			name:  "string",
-			items: []item{stringItem("foo", "FOO")},
+			items: []*item{stringItem("foo", "FOO")},
 			want:  "foo",
 		},
 		{
 			name:  "string failure",
-			items: []item{stringItem("foo", "FOO")},
+			items: []*item{stringItem("foo", "FOO")},
 			writer: func(string) (int, error) {
 				return 0, testError
 			},
@@ -184,12 +189,12 @@ func Test_render(t *testing.T) {
 		},
 		{
 			name:  "newline",
-			items: []item{newlineItem},
+			items: []*item{newlineItem},
 			want:  "\n",
 		},
 		{
 			name:  "newline failure",
-			items: []item{newlineItem},
+			items: []*item{newlineItem},
 			writer: func(string) (int, error) {
 				return 0, testError
 			},
@@ -197,17 +202,17 @@ func Test_render(t *testing.T) {
 		},
 		{
 			name:  "token",
-			items: []item{tokenItem(syntax.EQL, "EQL")},
+			items: []*item{tokenItem(syntax.EQL, "EQL")},
 			want:  "==",
 		},
 		{
 			name:    "illegal token",
-			items:   []item{tokenItem(syntax.ILLEGAL, "ILLEGAL")},
+			items:   []*item{tokenItem(syntax.ILLEGAL, "ILLEGAL")},
 			wantErr: "test illegal token ILLEGAL token: illegal token not supported",
 		},
 		{
 			name:  "token failure",
-			items: []item{tokenItem(syntax.EQL, "EQL")},
+			items: []*item{tokenItem(syntax.EQL, "EQL")},
 			writer: func(string) (int, error) {
 				return 0, testError
 			},
@@ -215,12 +220,12 @@ func Test_render(t *testing.T) {
 		},
 		{
 			name:  "sequence",
-			items: []item{quoteItem, spaceItem, tokenItem(syntax.EQL, "EQL"), spaceItem, quoteItem},
+			items: []*item{quoteItem, spaceItem, tokenItem(syntax.EQL, "EQL"), spaceItem, quoteItem},
 			want:  `" == "`,
 		},
 		{
 			name:    "sequence failure",
-			items:   []item{quoteItem, spaceItem, tokenItem(syntax.EQL, "EQL"), spaceItem, quoteItem, tokenItem(syntax.ILLEGAL, "ILLEGAL")},
+			items:   []*item{quoteItem, spaceItem, tokenItem(syntax.EQL, "EQL"), spaceItem, quoteItem, tokenItem(syntax.ILLEGAL, "ILLEGAL")},
 			wantErr: "test sequence failure ILLEGAL token: illegal token not supported",
 		},
 	}

@@ -10,10 +10,10 @@ import (
 	"go.starlark.net/syntax"
 )
 
-func exprSequence(source []syntax.Expr, ro renderOption) []item {
+func exprSequence(source []syntax.Expr, ro renderOption) []*item {
 	var (
-		items        []item
-		sep          []item
+		items        []*item
+		sep          []*item
 		prefixIndent bool
 		lastComma    bool
 		sourceLen    = len(source)
@@ -47,7 +47,7 @@ func exprSequence(source []syntax.Expr, ro renderOption) []item {
 			items = append(items,
 				exprItemIndent(arg, fmt.Sprintf("element %d", i)),
 			)
-			sep = []item{tokenItem(syntax.COMMA, "COMMA"), newlineItem, extraIndentItem}
+			sep = []*item{tokenItem(syntax.COMMA, "COMMA"), newlineItem, extraIndentItem}
 		} else {
 			items = append(items,
 				exprItem(arg, fmt.Sprintf("element %d", i)),
@@ -78,7 +78,7 @@ func binaryExpr(out io.StringWriter, input *syntax.BinaryExpr, opts *outputOpts)
 		return errors.New("rendering binary expression: nil input")
 	}
 
-	items := []item{
+	items := []*item{
 		exprItem(input.X, "X"),
 	}
 
@@ -106,7 +106,7 @@ func callExpr(out io.StringWriter, input *syntax.CallExpr, opts *outputOpts) err
 		return errors.New("rendering call expression: nil input")
 	}
 
-	items := []item{
+	items := []*item{
 		exprItem(input.Fn, "Fn"),
 		tokenItem(syntax.LPAREN, "LPAREN"),
 	}
@@ -131,7 +131,7 @@ func comprehension(out io.StringWriter, input *syntax.Comprehension, opts *outpu
 		tokens = []syntax.Token{syntax.LBRACE, syntax.RBRACE}
 	}
 
-	items := []item{
+	items := []*item{
 		tokenItem(tokens[0], "left token"),
 		exprItem(input.Body, "Body"),
 	}
@@ -210,7 +210,7 @@ func dictExpr(out io.StringWriter, input *syntax.DictExpr, opts *outputOpts) err
 		}
 	}
 
-	items := []item{
+	items := []*item{
 		tokenItem(syntax.LBRACE, "LBRACE"),
 	}
 
@@ -259,7 +259,7 @@ func listExpr(out io.StringWriter, input *syntax.ListExpr, opts *outputOpts) err
 		return errors.New("rendering list expression: nil input")
 	}
 
-	items := []item{
+	items := []*item{
 		tokenItem(syntax.LBRACK, "LBRACK"),
 	}
 
@@ -316,7 +316,7 @@ func sliceExpr(out io.StringWriter, input *syntax.SliceExpr, opts *outputOpts) e
 		return errors.New("rendering slice expression: nil input")
 	}
 
-	items := []item{
+	items := []*item{
 		exprItem(input.X, "X"),
 		tokenItem(syntax.LBRACK, "LBRACK"),
 	}
