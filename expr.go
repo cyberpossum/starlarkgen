@@ -304,11 +304,17 @@ func parenExpr(out io.StringWriter, input *syntax.ParenExpr, opts *outputOpts) e
 		return errors.New("rendering paren expression: nil input")
 	}
 
-	return render(out, "rendering paren expression", opts,
-		tokenItem(syntax.LPAREN, "LPAREN"),
-		exprItem(input.X, "X"),
-		tokenItem(syntax.RPAREN, "RPAREN"),
-	)
+	if _, err := out.WriteString(syntax.LPAREN.String()); err != nil {
+		return fmt.Errorf("rendering paren expression LPAREN token: %w", err)
+	}
+	if err := expr(out, input.X, opts); err != nil {
+		return fmt.Errorf("rendering paren expression X: %w", err)
+	}
+	if _, err := out.WriteString(syntax.RPAREN.String()); err != nil {
+		return fmt.Errorf("rendering paren expression RPAREN token: %w", err)
+	}
+
+	return nil
 }
 
 func sliceExpr(out io.StringWriter, input *syntax.SliceExpr, opts *outputOpts) error {
@@ -365,16 +371,21 @@ func unaryExpr(out io.StringWriter, input *syntax.UnaryExpr, opts *outputOpts) e
 	//
 	// As a special case, UnaryOp{Op:Star} may also represent
 	// the star parameter in def f(*args) or def f(*, x).
-	if input.Op == syntax.STAR && input.X == nil {
-		return render(out, "rendering unary expression", opts,
-			tokenItem(syntax.STAR, "STAR"),
-		)
+	if input.X == nil && input.Op != syntax.STAR {
+		return fmt.Errorf("rendering unary expression, nil X value for %q token", input.Op)
 	}
 
-	return render(out, "rendering unary expression", opts,
-		tokenItem(input.Op, "Op"),
-		exprItem(input.X, "X"),
-	)
+	if _, err := out.WriteString(input.Op.String()); err != nil {
+		return fmt.Errorf("rendering unary expression, writing %q token: %w", input.Op, err)
+	}
+
+	if input.X != nil {
+		if err := expr(out, input.X, opts); err != nil {
+			return fmt.Errorf("rendering unary expression X: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func expr(out io.StringWriter, input syntax.Expr, opts *outputOpts) error {
