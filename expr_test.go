@@ -1423,10 +1423,11 @@ func Benchmark_huge_encapsulation_expr(b *testing.B) {
 	for i := 1; i < numRanges; i++ {
 		ranges[i] = ranges[i-1] * 10
 	}
+	fooIdent := &syntax.Ident{Name: "foo"}
 	for _, num := range ranges {
-		x := &syntax.ParenExpr{X: &syntax.Literal{Value: 1}}
+		var x syntax.Expr = &syntax.ParenExpr{X: &syntax.Literal{Value: 1}}
 		for i := 0; i < num; i++ {
-			x = &syntax.ParenExpr{X: &syntax.UnaryExpr{Op: syntax.MINUS, X: x}}
+			x = &syntax.IndexExpr{X: fooIdent, Y: &syntax.ParenExpr{X: &syntax.UnaryExpr{Op: syntax.MINUS, X: x}}}
 		}
 		b.Run(strconv.Itoa(num), func(b *testing.B) {
 			for tt := 0; tt < b.N; tt++ {
