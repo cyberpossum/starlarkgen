@@ -238,7 +238,11 @@ func ident(out io.StringWriter, input *syntax.Ident, opts *outputOpts) error {
 		return errors.New("rendering ident: nil input")
 	}
 
-	return render(out, "rendering ident", opts, stringItem(input.Name, "Name"))
+	if _, err := out.WriteString(input.Name); err != nil {
+		return fmt.Errorf("rendering ident Name: %w", err)
+	}
+
+	return nil
 }
 
 func indexExpr(out io.StringWriter, input *syntax.IndexExpr, opts *outputOpts) error {
@@ -246,12 +250,20 @@ func indexExpr(out io.StringWriter, input *syntax.IndexExpr, opts *outputOpts) e
 		return errors.New("rendering index expression: nil input")
 	}
 
-	return render(out, "rendering index expression", opts,
-		exprItem(input.X, "X"),
-		tokenItem(syntax.LBRACK, "LBRACK"),
-		exprItem(input.Y, "Y"),
-		tokenItem(syntax.RBRACK, "RBRACK"),
-	)
+	if err := expr(out, input.X, opts); err != nil {
+		return fmt.Errorf("rendering index expression X: %w", err)
+	}
+	if _, err := out.WriteString(syntax.LBRACK.String()); err != nil {
+		return fmt.Errorf("rendering index expression LBRACK token: %w", err)
+	}
+	if err := expr(out, input.Y, opts); err != nil {
+		return fmt.Errorf("rendering index expression Y: %w", err)
+	}
+	if _, err := out.WriteString(syntax.RBRACK.String()); err != nil {
+		return fmt.Errorf("rendering index expression RBRACK token: %w", err)
+	}
+
+	return nil
 }
 
 func listExpr(out io.StringWriter, input *syntax.ListExpr, opts *outputOpts) error {
