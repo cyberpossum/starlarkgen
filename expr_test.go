@@ -376,7 +376,7 @@ func Test_expr(t *testing.T) {
 		{
 			name:           "unary expr, invalid no X, Op != STAR",
 			inputUnaryExpr: &syntax.UnaryExpr{Op: syntax.MINUS},
-			wantErr:        "rendering unary expression X: type <nil> is not supported",
+			wantErr:        "rendering unary expression, nil X value for \"-\" token",
 		},
 	}
 	for _, tt := range tests {
@@ -1090,11 +1090,11 @@ func Test_writerFailureExpr(t *testing.T) {
 			newExpectingWriters("\n", 4, "rendering tuple expression NEWLINE token:", WithTupleOption(TupleOptionMultilineMultipleComma)),
 		},
 		&syntax.UnaryExpr{Op: syntax.MINUS, X: xIdent}: {
-			newExpectingWriters("-", 1, "rendering unary expression Op token:"),
+			newExpectingWriters("-", 1, "rendering unary expression, writing \"-\" token:"),
 			newExpectingWriters("x", 1, "rendering unary expression X: rendering ident Name:"),
 		},
 		&syntax.UnaryExpr{Op: syntax.STAR}: {
-			newExpectingWriters("*", 1, "rendering unary expression STAR token:"),
+			newExpectingWriters("*", 1, "rendering unary expression, writing \"*\" token:"),
 		},
 
 		// statements
