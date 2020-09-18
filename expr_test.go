@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -62,6 +63,12 @@ func newExpectingWriters(token string, failNum int, errPrefix string, opts ...Op
 	}
 
 	return res
+}
+
+type nilWriter struct{}
+
+func (n *nilWriter) WriteString(string) (int, error) {
+	return 0, nil
 }
 
 func Test_expr(t *testing.T) {
@@ -1403,6 +1410,30 @@ func Test_nilExpr(t *testing.T) {
 			}
 			if gotErr := err.Error(); gotErr != tt.wantErr {
 				t.Fatalf("expected error %q, got %q", tt.wantErr, gotErr)
+			}
+		})
+	}
+}
+
+func Benchmark_huge_encapsulation_expr(b *testing.B) {
+	const numRanges = 6
+
+	ranges := make([]int, numRanges)
+	ranges[0] = 1
+	for i := 1; i < numRanges; i++ {
+		ranges[i] = ranges[i-1] * 10
+	}
+	for _, num := range ranges {
+		x := &syntax.ParenExpr{X: &syntax.Literal{Value: 1}}
+		for i := 0; i < num; i++ {
+			x = &syntax.ParenExpr{X: &syntax.UnaryExpr{Op: syntax.MINUS, X: x}}
+		}
+		b.Run(strconv.Itoa(num), func(b *testing.B) {
+			for tt := 0; tt < b.N; tt++ {
+				err := WriteExpr(&nilWriter{}, x)
+				if err != nil {
+					b.Fatalf("unexpected error: %v", err)
+				}
 			}
 		})
 	}
