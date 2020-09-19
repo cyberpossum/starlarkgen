@@ -1461,7 +1461,7 @@ func Benchmark_huge_encapsulation_expr(b *testing.B) {
 				X: &syntax.DictExpr{List: []syntax.Expr{
 					&syntax.DictEntry{Key: fooIdent, Value: &syntax.BinaryExpr{
 						Op: syntax.EQL,
-						X:  &syntax.CondExpr{Cond: fooLessBar, True: fooIdent, False: barIdent},
+						X:  &syntax.CondExpr{Cond: fooLessBar, True: &syntax.DotExpr{X: fooIdent, Name: barIdent}, False: &syntax.ListExpr{List: []syntax.Expr{fooIdent, tenLiteral, barIdent}}},
 						Y: &syntax.Comprehension{
 							Curly: true,
 							Body:  fooIdent,
