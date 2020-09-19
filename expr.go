@@ -24,7 +24,7 @@ const (
 	sepCommaNewlineIndent
 )
 
-func outputExprSequence(out io.StringWriter, source []syntax.Expr, ro renderOption, opts *outputOpts) error {
+func exprSequence(out io.StringWriter, source []syntax.Expr, ro renderOption, opts *outputOpts) error {
 	var (
 		sep          sepType
 		prefixIndent bool
@@ -108,69 +108,6 @@ func outputExprSequence(out io.StringWriter, source []syntax.Expr, ro renderOpti
 	return nil
 }
 
-func exprSequence(source []syntax.Expr, ro renderOption) []*item {
-	var (
-		items        []*item
-		sep          []*item
-		prefixIndent bool
-		lastComma    bool
-		sourceLen    = len(source)
-	)
-
-	switch ro.multiLineType() {
-	case multiLine:
-		prefixIndent = sourceLen > 0
-	case multiLineMultiple:
-		prefixIndent = sourceLen > 1
-	}
-	switch ro.commaType() {
-	case alwaysLastComma:
-		lastComma = sourceLen > 0
-	case lastCommaTwoAndMore:
-		lastComma = sourceLen > 1
-	}
-
-	if prefixIndent {
-		items = append(items,
-			newlineItem,
-			extraIndentItem,
-		)
-	}
-
-	for i, arg := range source {
-		items = append(items,
-			sep...,
-		)
-		if prefixIndent {
-			items = append(items,
-				exprItemIndent(arg, fmt.Sprintf("element %d", i)),
-			)
-			sep = []*item{tokenItem(syntax.COMMA, "COMMA"), newlineItem, extraIndentItem}
-		} else {
-			items = append(items,
-				exprItem(arg, fmt.Sprintf("element %d", i)),
-			)
-			sep = commaSpace
-		}
-	}
-
-	// add last comma if respective option is set
-	if lastComma {
-		items = append(items,
-			tokenItem(syntax.COMMA, "COMMA"),
-		)
-	}
-	// indent and newline for multiline
-	if prefixIndent {
-		items = append(items,
-			newlineItem,
-			indentItem,
-		)
-	}
-
-	return items
-}
-
 func binaryExpr(out io.StringWriter, input *syntax.BinaryExpr, opts *outputOpts) error {
 	if input == nil {
 		return errors.New("rendering binary expression: nil input")
@@ -216,7 +153,7 @@ func callExpr(out io.StringWriter, input *syntax.CallExpr, opts *outputOpts) err
 		return fmt.Errorf("rendering call expression LPAREN token: %w", err)
 	}
 
-	if err := outputExprSequence(out, input.Args, renderOption(opts.callOption), opts); err != nil {
+	if err := exprSequence(out, input.Args, renderOption(opts.callOption), opts); err != nil {
 		return fmt.Errorf("rendering call expression: %w", err)
 	}
 
@@ -370,7 +307,7 @@ func dictExpr(out io.StringWriter, input *syntax.DictExpr, opts *outputOpts) err
 		return fmt.Errorf("rendering dict expression LBRACE token: %w", err)
 	}
 
-	if err := outputExprSequence(out, input.List, renderOption(opts.dictOption), opts); err != nil {
+	if err := exprSequence(out, input.List, renderOption(opts.dictOption), opts); err != nil {
 		return fmt.Errorf("rendering dict expression: %w", err)
 	}
 
@@ -440,7 +377,7 @@ func listExpr(out io.StringWriter, input *syntax.ListExpr, opts *outputOpts) err
 		return fmt.Errorf("rendering list expression LBRACK token: %w", err)
 	}
 
-	if err := outputExprSequence(out, input.List, renderOption(opts.listOption), opts); err != nil {
+	if err := exprSequence(out, input.List, renderOption(opts.listOption), opts); err != nil {
 		return fmt.Errorf("rendering list expression: %w", err)
 	}
 
@@ -541,7 +478,7 @@ func tupleExpr(out io.StringWriter, input *syntax.TupleExpr, opts *outputOpts) e
 		return errors.New("rendering tuple expression: nil input")
 	}
 
-	if err := outputExprSequence(out, input.List, renderOption(opts.tupleOption), opts); err != nil {
+	if err := exprSequence(out, input.List, renderOption(opts.tupleOption), opts); err != nil {
 		return fmt.Errorf("rendering tuple expression: %w", err)
 	}
 
