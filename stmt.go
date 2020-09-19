@@ -274,7 +274,7 @@ func whileStmt(out io.StringWriter, input *syntax.WhileStmt, opts *outputOpts) e
 		return errors.New("rendering while statement: nil input")
 	}
 
-	return render(out, "rendering if statement", opts,
+	return render(out, "rendering while statement", opts,
 		indentItem,
 		tokenItem(syntax.WHILE, "WHILE"),
 		spaceItem,

@@ -13,6 +13,8 @@ string_value, string_value_2 = "A", "C"
 
 people = {"Alice": 22, "Bob": 40, "Charlie": 55, "Dave": 14}
 
+even_squares = {n: n * n for n in range(10) if n % 2 == 0}
+
 names = ", ".join(people.keys())
 
 mytuple = (1, 2, 3)
