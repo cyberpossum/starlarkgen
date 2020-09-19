@@ -394,25 +394,46 @@ func literal(out io.StringWriter, input *syntax.Literal, opts *outputOpts) error
 	}
 
 	if input.Value == nil {
-		return render(out, "rendering literal raw", opts, stringItem(input.Raw, "raw value"))
+		if _, err := out.WriteString(input.Raw); err != nil {
+			return fmt.Errorf("rendering literal raw value: %w", err)
+		}
+		return nil
 	}
 
 	switch t := input.Value.(type) {
 	case string:
-		return render(out, "rendering literal string value", opts, stringItem(starlark.String(t).String(), "string payload"))
+		if _, err := out.WriteString(starlark.String(t).String()); err != nil {
+			return fmt.Errorf("rendering literal string value: %w", err)
+		}
+		return nil
 	case int:
-		return render(out, "rendering literal int value", opts, stringItem(starlark.MakeInt(t).String(), "int payload"))
+		if _, err := out.WriteString(starlark.MakeInt(t).String()); err != nil {
+			return fmt.Errorf("rendering literal int value: %w", err)
+		}
+		return nil
 	case uint:
-		return render(out, "rendering literal uint value", opts, stringItem(starlark.MakeUint(t).String(), "uint payload"))
+		if _, err := out.WriteString(starlark.MakeUint(t).String()); err != nil {
+			return fmt.Errorf("rendering literal uint value: %w", err)
+		}
+		return nil
 	case int64:
-		return render(out, "rendering literal int64 value", opts, stringItem(starlark.MakeInt64(t).String(), "int64 payload"))
+		if _, err := out.WriteString(starlark.MakeInt64(t).String()); err != nil {
+			return fmt.Errorf("rendering literal int64 value: %w", err)
+		}
+		return nil
 	case uint64:
-		return render(out, "rendering literal uint64 value", opts, stringItem(starlark.MakeUint64(t).String(), "uint64 payload"))
+		if _, err := out.WriteString(starlark.MakeUint64(t).String()); err != nil {
+			return fmt.Errorf("rendering literal uint64 value: %w", err)
+		}
+		return nil
 	case *big.Int:
 		if t == nil {
 			return errors.New("nil literal *big.Int value provided")
 		}
-		return render(out, "rendering literal int64 value", opts, stringItem(starlark.MakeBigInt(t).String(), "*big.Int payload"))
+		if _, err := out.WriteString(starlark.MakeBigInt(t).String()); err != nil {
+			return fmt.Errorf("rendering literal *big.Int value: %w", err)
+		}
+		return nil
 	default:
 		return fmt.Errorf("unsupported literal value type %T, expected string, int, int64, uint, uint64 or *big.Int", t)
 	}
