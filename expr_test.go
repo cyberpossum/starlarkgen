@@ -2,12 +2,67 @@ package starlarkgen
 
 import (
 	"fmt"
+	"io"
 	"math/big"
 	"strings"
 	"testing"
 
 	"go.starlark.net/syntax"
 )
+
+type expectingWriter struct {
+	expects       map[string]int
+	expectedError error
+}
+
+func (ew *expectingWriter) WriteString(s string) (int, error) {
+	if n, ok := ew.expects[s]; ok {
+		if n <= 0 {
+			return 0, ew.expectedError
+		}
+		ew.expects[s]--
+	}
+
+	return len(s), nil
+}
+
+func newExpectingWriter(token string, failOn int, expected bool) *expectingWriter {
+	if failOn <= 0 {
+		panic(failOn)
+	}
+	expectedStr := "AS EXPECTED"
+	if !expected {
+		expectedStr = "UNEXPECTED"
+	}
+	return &expectingWriter{
+		expects:       map[string]int{token: failOn - 1},
+		expectedError: fmt.Errorf("%s: %q occurence %d", expectedStr, token, failOn),
+	}
+}
+
+type wantSetup struct {
+	writerSetup io.StringWriter
+	wantErr     string
+	opts        []Option
+}
+
+func newExpectingWriters(token string, failNum int, errPrefix string, opts ...Option) []wantSetup {
+	res := make([]wantSetup, failNum+1)
+	for i := 0; i < failNum; i++ {
+		res[i] = wantSetup{
+			writerSetup: newExpectingWriter(token, i+1, true),
+			opts:        opts,
+			wantErr:     errPrefix + fmt.Sprintf(" AS EXPECTED: %q occurence %d", token, i+1),
+		}
+	}
+	res[failNum] = wantSetup{
+		writerSetup: newExpectingWriter(token, failNum+1, false),
+		opts:        opts,
+		wantErr:     "",
+	}
+
+	return res
+}
 
 func Test_expr(t *testing.T) {
 	tests := []struct {
@@ -310,6 +365,11 @@ func Test_expr(t *testing.T) {
 			name:           "unary expr, special case single star",
 			inputUnaryExpr: &syntax.UnaryExpr{Op: syntax.STAR},
 			want:           "*",
+		},
+		{
+			name:           "unary expr, invalid no X, Op != STAR",
+			inputUnaryExpr: &syntax.UnaryExpr{Op: syntax.MINUS},
+			wantErr:        "rendering unary expression X: type <nil> is not supported",
 		},
 	}
 	for _, tt := range tests {
@@ -853,6 +913,382 @@ func Test_withTupleOption(t *testing.T) {
 					t.Errorf("expected nil error and %q, got %v and %q", tt.want[name], err, got)
 				}
 			})
+		}
+	}
+}
+
+func Test_writerFailureExpr(t *testing.T) {
+	var (
+		fooCond       = &syntax.Ident{Name: "foo_cond"}
+		fooIdent      = &syntax.Ident{Name: "foo"}
+		xIdent        = &syntax.Ident{Name: "x"}
+		yIdent        = &syntax.Ident{Name: "y"}
+		oneLiteral    = &syntax.Literal{Value: 1}
+		twentyLiteral = &syntax.Literal{Value: 20}
+	)
+	testMap := map[syntax.Node][][]wantSetup{
+		// expressions
+		&syntax.BinaryExpr{X: xIdent, Y: yIdent, Op: syntax.EQL}: {
+			newExpectingWriters("x", 1, "rendering binary expression X: rendering ident Name:"),
+			newExpectingWriters("y", 1, "rendering binary expression Y: rendering ident Name:"),
+			newExpectingWriters("==", 1, "rendering binary expression Op token:"),
+			newExpectingWriters(" ", 2, "rendering binary expression space:"),
+		},
+		&syntax.CallExpr{Args: []syntax.Expr{oneLiteral, xIdent, twentyLiteral}, Fn: yIdent}: {
+			newExpectingWriters("(", 1, "rendering call expression LPAREN token:"),
+			newExpectingWriters(")", 1, "rendering call expression RPAREN token:"),
+			newExpectingWriters(" ", 2, "rendering call expression space:"),
+			newExpectingWriters(",", 2, "rendering call expression COMMA token:"),
+			newExpectingWriters(",", 3, "rendering call expression COMMA token:", WithCallOption(CallOptionSingleLineComma)),
+			newExpectingWriters("\n", 4, "rendering call expression NEWLINE token:", WithCallOption(CallOptionMultilineComma)),
+			newExpectingWriters("    ", 3, "rendering call expression indent:", WithCallOption(CallOptionMultilineComma)),
+			newExpectingWriters("1", 1, "rendering call expression element 0: rendering literal int value int payload:"),
+			newExpectingWriters("x", 1, "rendering call expression element 1: rendering ident Name:"),
+			newExpectingWriters("20", 1, "rendering call expression element 2: rendering literal int value int payload:"),
+			newExpectingWriters("y", 1, "rendering call expression Fn: rendering ident Name:"),
+		},
+		&syntax.Comprehension{
+			Body: fooIdent,
+			Clauses: []syntax.Node{
+				&syntax.IfClause{Cond: fooCond},
+				&syntax.ForClause{X: xIdent, Vars: yIdent},
+			},
+		}: {
+			newExpectingWriters("[", 1, "rendering comprehension left token:"),
+			newExpectingWriters("]", 1, "rendering comprehension right token:"),
+			newExpectingWriters(" ", 6, "rendering comprehension space:"),
+			newExpectingWriters("in", 1, "rendering comprehension IN token:"),
+			newExpectingWriters("if", 1, "rendering comprehension IF token:"),
+			newExpectingWriters("for", 1, "rendering comprehension FOR token:"),
+			newExpectingWriters("y", 1, "rendering comprehension for clause Vars: rendering ident Name:"),
+			newExpectingWriters("x", 1, "rendering comprehension for clause X: rendering ident Name:"),
+			newExpectingWriters("foo_cond", 1, "rendering comprehension if clause Cond: rendering ident Name:"),
+		},
+		&syntax.Comprehension{
+			Curly: true,
+			Body:  fooIdent,
+			Clauses: []syntax.Node{
+				&syntax.IfClause{Cond: fooCond},
+				&syntax.ForClause{X: xIdent, Vars: yIdent},
+			},
+		}: {
+			newExpectingWriters("{", 1, "rendering comprehension left token:"),
+			newExpectingWriters("}", 1, "rendering comprehension right token:"),
+			newExpectingWriters(" ", 6, "rendering comprehension space:"),
+			newExpectingWriters("in", 1, "rendering comprehension IN token:"),
+			newExpectingWriters("if", 1, "rendering comprehension IF token:"),
+			newExpectingWriters("for", 1, "rendering comprehension FOR token:"),
+			newExpectingWriters("y", 1, "rendering comprehension for clause Vars: rendering ident Name:"),
+			newExpectingWriters("x", 1, "rendering comprehension for clause X: rendering ident Name:"),
+			newExpectingWriters("foo_cond", 1, "rendering comprehension if clause Cond: rendering ident Name:"),
+		},
+		&syntax.CondExpr{Cond: fooCond, True: xIdent, False: yIdent}: {
+			newExpectingWriters("foo_cond", 1, "rendering condition expression Cond: rendering ident Name:"),
+			newExpectingWriters("if", 1, "rendering condition expression IF token:"),
+			newExpectingWriters("else", 1, "rendering condition expression ELSE token:"),
+			newExpectingWriters(" ", 4, "rendering condition expression space:"),
+			newExpectingWriters("y", 1, "rendering condition expression False: rendering ident Name:"),
+			newExpectingWriters("x", 1, "rendering condition expression True: rendering ident Name:"),
+		},
+		&syntax.DictEntry{Key: xIdent, Value: yIdent}: {
+			newExpectingWriters("y", 1, "rendering dict entry Value: rendering ident Name:"),
+			newExpectingWriters("x", 1, "rendering dict entry Key: rendering ident Name:"),
+			newExpectingWriters(":", 1, "rendering dict entry COLON token:"),
+			newExpectingWriters(" ", 1, "rendering dict entry space:"),
+		},
+		&syntax.DictExpr{List: []syntax.Expr{&syntax.DictEntry{Key: xIdent, Value: yIdent}}}: {
+			newExpectingWriters("{", 1, "rendering dict expression LBRACE token:"),
+			newExpectingWriters("}", 1, "rendering dict expression RBRACE token:"),
+			newExpectingWriters("y", 1, "rendering dict expression element 0: rendering dict entry Value: rendering ident Name:"),
+			newExpectingWriters("x", 1, "rendering dict expression element 0: rendering dict entry Key: rendering ident Name:"),
+			newExpectingWriters(":", 1, "rendering dict expression element 0: rendering dict entry COLON token:"),
+			newExpectingWriters(" ", 1, "rendering dict expression element 0: rendering dict entry space:"),
+			newExpectingWriters(",", 1, "rendering dict expression COMMA token:", WithDictOption(DictOptionMultilineComma)),
+			newExpectingWriters("\n", 2, "rendering dict expression NEWLINE token:", WithDictOption(DictOptionMultilineComma)),
+			newExpectingWriters("    ", 1, "rendering dict expression indent:", WithDictOption(DictOptionMultilineComma)),
+		},
+		&syntax.DotExpr{Name: yIdent, X: xIdent}: {
+			newExpectingWriters("y", 1, "rendering dot expression Name: rendering ident Name:"),
+			newExpectingWriters("x", 1, "rendering dot expression X: rendering ident Name:"),
+			newExpectingWriters(".", 1, "rendering dot expression DOT token:"),
+		},
+		xIdent: {
+			newExpectingWriters("x", 1, "rendering ident Name:"),
+		},
+		&syntax.IndexExpr{X: xIdent, Y: yIdent}: {
+			newExpectingWriters("x", 1, "rendering index expression X: rendering ident Name:"),
+			newExpectingWriters("y", 1, "rendering index expression Y: rendering ident Name:"),
+			newExpectingWriters("[", 1, "rendering index expression LBRACK token:"),
+			newExpectingWriters("]", 1, "rendering index expression RBRACK token:"),
+		},
+		&syntax.LambdaExpr{}: nil,
+		&syntax.ListExpr{List: []syntax.Expr{
+			fooIdent,
+			xIdent,
+			yIdent,
+			twentyLiteral,
+		}}: {
+			newExpectingWriters("foo", 1, "rendering list expression element 0: rendering ident Name:"),
+			newExpectingWriters("x", 1, "rendering list expression element 1: rendering ident Name:"),
+			newExpectingWriters("y", 1, "rendering list expression element 2: rendering ident Name:"),
+			newExpectingWriters("20", 1, "rendering list expression element 3: rendering literal int value int payload:"),
+			newExpectingWriters("[", 1, "rendering list expression LBRACK token:"),
+			newExpectingWriters("]", 1, "rendering list expression RBRACK token:"),
+			newExpectingWriters(",", 3, "rendering list expression COMMA token:"),
+			newExpectingWriters(" ", 3, "rendering list expression space:"),
+			newExpectingWriters(",", 4, "rendering list expression COMMA token:", WithListOption(ListOptionMultilineComma)),
+			newExpectingWriters("\n", 5, "rendering list expression NEWLINE token:", WithListOption(ListOptionMultilineComma)),
+			newExpectingWriters("    ", 4, "rendering list expression indent:", WithListOption(ListOptionMultilineComma)),
+		},
+		twentyLiteral: {
+			newExpectingWriters("20", 1, "rendering literal int value int payload:"),
+		},
+		&syntax.Literal{Value: "test"}: {
+			newExpectingWriters(`"test"`, 1, "rendering literal string value string payload:"),
+		},
+		&syntax.Literal{Value: uint64(10)}: {
+			newExpectingWriters("10", 1, "rendering literal uint64 value uint64 payload:"),
+		},
+		&syntax.Literal{Value: uint(10)}: {
+			newExpectingWriters("10", 1, "rendering literal uint value uint payload:"),
+		},
+		&syntax.Literal{Value: int64(-10)}: {
+			newExpectingWriters("-10", 1, "rendering literal int64 value int64 payload:"),
+		},
+		&syntax.Literal{Value: big.NewInt(-10)}: {
+			newExpectingWriters("-10", 1, "rendering literal int64 value *big.Int payload:"),
+		},
+		&syntax.ParenExpr{X: xIdent}: {
+			newExpectingWriters("x", 1, "rendering paren expression X: rendering ident Name:"),
+			newExpectingWriters("(", 1, "rendering paren expression LPAREN token:"),
+			newExpectingWriters(")", 1, "rendering paren expression RPAREN token:"),
+		},
+		&syntax.SliceExpr{Hi: fooIdent, X: xIdent, Lo: twentyLiteral, Step: oneLiteral}: {
+			newExpectingWriters("[", 1, "rendering slice expression LBRACK token:"),
+			newExpectingWriters("]", 1, "rendering slice expression RBRACK token:"),
+			newExpectingWriters(":", 2, "rendering slice expression COLON token:"),
+			newExpectingWriters("foo", 1, "rendering slice expression Hi: rendering ident Name:"),
+			newExpectingWriters("x", 1, "rendering slice expression X: rendering ident Name:"),
+			newExpectingWriters("1", 1, "rendering slice expression Step: rendering literal int value int payload:"),
+			newExpectingWriters("20", 1, "rendering slice expression Lo: rendering literal int value int payload:"),
+		},
+		&syntax.TupleExpr{List: []syntax.Expr{xIdent, yIdent, twentyLiteral}}: {
+			newExpectingWriters("x", 1, "rendering tuple expression element 0: rendering ident Name:"),
+			newExpectingWriters("y", 1, "rendering tuple expression element 1: rendering ident Name:"),
+			newExpectingWriters("20", 1, "rendering tuple expression element 2: rendering literal int value int payload:"),
+			newExpectingWriters(",", 2, "rendering tuple expression COMMA token:"),
+			newExpectingWriters(" ", 2, "rendering tuple expression space:"),
+			newExpectingWriters(",", 3, "rendering tuple expression COMMA token:", WithTupleOption(TupleOptionMultilineMultipleComma)),
+			newExpectingWriters("    ", 3, "rendering tuple expression indent:", WithTupleOption(TupleOptionMultilineMultipleComma)),
+			newExpectingWriters("\n", 4, "rendering tuple expression NEWLINE token:", WithTupleOption(TupleOptionMultilineMultipleComma)),
+		},
+		&syntax.UnaryExpr{Op: syntax.MINUS, X: xIdent}: {
+			newExpectingWriters("-", 1, "rendering unary expression Op token:"),
+			newExpectingWriters("x", 1, "rendering unary expression X: rendering ident Name:"),
+		},
+		&syntax.UnaryExpr{Op: syntax.STAR}: {
+			newExpectingWriters("*", 1, "rendering unary expression STAR token:"),
+		},
+
+		// statements
+		&syntax.AssignStmt{LHS: xIdent, Op: syntax.PLUS_EQ, RHS: yIdent}: {
+			newExpectingWriters("x", 1, "rendering assignment statement LHS: rendering ident Name:"),
+			newExpectingWriters("y", 1, "rendering assignment statement RHS: rendering ident Name:"),
+			newExpectingWriters("+=", 1, "rendering assignment statement Op token:"),
+			newExpectingWriters(" ", 2, "rendering assignment statement space:"),
+			newExpectingWriters("\n", 1, "rendering assignment statement NEWLINE token:"),
+		},
+		&syntax.BranchStmt{Token: syntax.PASS}: {
+			newExpectingWriters("pass", 1, "rendering branch statement Token token:"),
+			newExpectingWriters("\n", 1, "rendering branch statement NEWLINE token:"),
+		},
+		&syntax.DefStmt{
+			Name:   fooIdent,
+			Params: []syntax.Expr{xIdent, yIdent},
+			Body: []syntax.Stmt{
+				&syntax.BranchStmt{Token: syntax.PASS},
+			},
+		}: {
+			newExpectingWriters("foo", 1, "rendering def statement Name: rendering ident Name:"),
+			newExpectingWriters("x", 1, "rendering def statement param 0: rendering ident Name:"),
+			newExpectingWriters("y", 1, "rendering def statement param 1: rendering ident Name:"),
+			newExpectingWriters("(", 1, "rendering def statement LPAREN token:"),
+			newExpectingWriters(")", 1, "rendering def statement RPAREN token:"),
+			newExpectingWriters(":", 1, "rendering def statement COLON token:"),
+			newExpectingWriters("def", 1, "rendering def statement DEF token:"),
+			newExpectingWriters(" ", 2, "rendering def statement space:"),
+			newExpectingWriters(",", 1, "rendering def statement COMMA token:"),
+			[]wantSetup{
+				{
+					writerSetup: newExpectingWriter("\n", 1, true),
+					wantErr:     "rendering def statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 1",
+				},
+				{
+					writerSetup: newExpectingWriter("\n", 2, true),
+					wantErr:     "rendering def statement, rendering Body statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 2",
+				},
+				{writerSetup: newExpectingWriter("\n", 3, false)},
+			},
+			newExpectingWriters("    ", 1, "rendering def statement, rendering Body statement index 0: rendering branch statement indent:"),
+			newExpectingWriters("pass", 1, "rendering def statement, rendering Body statement index 0: rendering branch statement Token token:"),
+		},
+		&syntax.ExprStmt{X: xIdent}: {
+			newExpectingWriters("x", 1, "rendering expression statement X: rendering ident Name:"),
+		},
+		&syntax.ForStmt{X: xIdent, Vars: yIdent, Body: []syntax.Stmt{
+			&syntax.BranchStmt{Token: syntax.PASS},
+		}}: {
+			newExpectingWriters("x", 1, "rendering for statement X: rendering ident Name:"),
+			newExpectingWriters("y", 1, "rendering for statement Vars: rendering ident Name:"),
+			newExpectingWriters("for", 1, "rendering for statement FOR token:"),
+			newExpectingWriters("in", 1, "rendering for statement IN token:"),
+			newExpectingWriters(" ", 3, "rendering for statement space:"),
+			newExpectingWriters(":", 1, "rendering for statement COLON token:"),
+			newExpectingWriters("pass", 1, "rendering for statement, rendering Body statement index 0: rendering branch statement Token token:"),
+			newExpectingWriters("    ", 1, "rendering for statement, rendering Body statement index 0: rendering branch statement indent:"),
+			[]wantSetup{
+				{
+					writerSetup: newExpectingWriter("\n", 1, true),
+					wantErr:     "rendering for statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 1",
+				},
+				{
+					writerSetup: newExpectingWriter("\n", 2, true),
+					wantErr:     "rendering for statement, rendering Body statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 2",
+				},
+				{writerSetup: newExpectingWriter("\n", 3, false)},
+			},
+		},
+		&syntax.IfStmt{
+			Cond:  fooCond,
+			False: []syntax.Stmt{&syntax.BranchStmt{Token: syntax.PASS}},
+			True:  []syntax.Stmt{&syntax.BranchStmt{Token: syntax.BREAK}},
+		}: {
+			newExpectingWriters("foo_cond", 1, "rendering if statement Cond: rendering ident Name:"),
+			newExpectingWriters("if", 1, "rendering if statement IF token:"),
+			newExpectingWriters("else", 1, "rendering if statement ELSE token:"),
+			newExpectingWriters("pass", 1, "rendering if statement, rendering False statement index 0: rendering branch statement Token token:"),
+			newExpectingWriters("break", 1, "rendering if statement, rendering True statement index 0: rendering branch statement Token token:"),
+			newExpectingWriters(" ", 1, "rendering if statement space:"),
+			newExpectingWriters(":", 2, "rendering if statement COLON token:"),
+			[]wantSetup{
+				{
+					writerSetup: newExpectingWriter("\n", 1, true),
+					wantErr:     "rendering if statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 1",
+				},
+				{
+					writerSetup: newExpectingWriter("\n", 2, true),
+					wantErr:     "rendering if statement, rendering True statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 2",
+				},
+				{
+					writerSetup: newExpectingWriter("\n", 3, true),
+					wantErr:     "rendering if statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 3",
+				},
+				{
+					writerSetup: newExpectingWriter("\n", 4, true),
+					wantErr:     "rendering if statement, rendering False statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 4",
+				},
+				{writerSetup: newExpectingWriter("\n", 5, false)},
+				{
+					writerSetup: newExpectingWriter("    ", 1, true),
+					wantErr:     "rendering if statement, rendering True statement index 0: rendering branch statement indent: AS EXPECTED: \"    \" occurence 1",
+				},
+				{
+					writerSetup: newExpectingWriter("    ", 2, true),
+					wantErr:     "rendering if statement, rendering False statement index 0: rendering branch statement indent: AS EXPECTED: \"    \" occurence 2",
+				},
+				{writerSetup: newExpectingWriter("    ", 3, false)},
+			},
+		},
+		&syntax.LoadStmt{From: []*syntax.Ident{yIdent, fooIdent}, To: []*syntax.Ident{xIdent, {Name: "bar"}}, Module: &syntax.Literal{Value: "module"}}: {
+			newExpectingWriters("x", 1, "rendering load statement To[0]: rendering ident Name:"),
+			newExpectingWriters("bar", 1, "rendering load statement To[1]: rendering ident Name:"),
+			newExpectingWriters("y", 1, "rendering load statement From[0]: rendering ident Name:"),
+			newExpectingWriters("foo", 1, "rendering load statement From[1]: rendering ident Name:"),
+			newExpectingWriters(`"module"`, 1, "rendering load statement Module: rendering literal string value string payload:"),
+			newExpectingWriters("load", 1, "rendering load statement LOAD token:"),
+			newExpectingWriters(" ", 2, "rendering load statement space:"),
+			newExpectingWriters("=", 2, "rendering load statement EQ token:"),
+			newExpectingWriters("(", 1, "rendering load statement LPAREN token:"),
+			newExpectingWriters(")", 1, "rendering load statement RPAREN token:"),
+			newExpectingWriters(",", 2, "rendering load statement COMMA token:"),
+			newExpectingWriters("\"", 4, "rendering load statement quote:"),
+			newExpectingWriters("\n", 1, "rendering load statement NEWLINE token:"),
+		},
+		&syntax.ReturnStmt{Result: xIdent}: {
+			newExpectingWriters("x", 1, "rendering return statement Result: rendering ident Name:"),
+			newExpectingWriters("return", 1, "rendering return statement RETURN token:"),
+			newExpectingWriters(" ", 1, "rendering return statement space:"),
+			newExpectingWriters("\n", 1, "rendering return statement NEWLINE token:"),
+		},
+		&syntax.WhileStmt{Cond: fooCond, Body: []syntax.Stmt{&syntax.BranchStmt{Token: syntax.PASS}}}: {
+			newExpectingWriters("while", 1, "rendering while statement WHILE token:"),
+			newExpectingWriters(" ", 1, "rendering while statement space:"),
+			newExpectingWriters("foo_cond", 1, "rendering while statement Cond: rendering ident Name:"),
+			newExpectingWriters(":", 1, "rendering while statement COLON token:"),
+			newExpectingWriters("    ", 1, "rendering while statement, rendering Body statement index 0: rendering branch statement indent:"),
+			newExpectingWriters("pass", 1, "rendering while statement, rendering Body statement index 0: rendering branch statement Token token:"),
+			[]wantSetup{
+				{
+					writerSetup: newExpectingWriter("\n", 1, true),
+					wantErr:     "rendering while statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 1",
+				},
+				{
+					writerSetup: newExpectingWriter("\n", 2, true),
+					wantErr:     "rendering while statement, rendering Body statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 2",
+				},
+				{writerSetup: newExpectingWriter("\n", 3, false)},
+			},
+		},
+
+		// breadcrumbs
+		&syntax.ListExpr{List: []syntax.Expr{
+			&syntax.BinaryExpr{
+				Op: syntax.MINUS,
+				X:  xIdent,
+				Y:  &syntax.ListExpr{List: []syntax.Expr{twentyLiteral, fooIdent}},
+			}}}: {
+			[]wantSetup{{
+				writerSetup: newExpectingWriter("foo", 1, true),
+				wantErr:     "rendering list expression element 0: rendering binary expression Y: rendering list expression element 1: rendering ident Name: AS EXPECTED: \"foo\" occurence 1",
+			}},
+		},
+	}
+	for testNode, tests := range testMap {
+		for _, subTests := range tests {
+			for _, tt := range subTests {
+				name := tt.wantErr
+				if name == "" {
+					name = fmt.Sprintf("%T", testNode)
+				}
+				ro, err := getOutputOpts(tt.opts...)
+				if err != nil {
+					t.Fatalf("invalid options: %v", err)
+				}
+				name = fmt.Sprintf("%s with %#v", name, ro)
+				t.Run(name, func(t *testing.T) {
+					var err error
+					switch value := testNode.(type) {
+					case syntax.Expr:
+						err = WriteExpr(tt.writerSetup, value, tt.opts...)
+					case syntax.Stmt:
+						err = WriteStmt(tt.writerSetup, value, tt.opts...)
+					default:
+						t.Fatalf("unexpected type %T", value)
+					}
+					if tt.wantErr != "" {
+						if err == nil {
+							t.Fatalf("expected error %q, got nil", tt.wantErr)
+						}
+						if gotErr := err.Error(); tt.wantErr != "" && gotErr != tt.wantErr {
+							t.Errorf("expected error %q, got %q", tt.wantErr, gotErr)
+						}
+						return
+					}
+					if err != nil {
+						t.Fatalf("expected no error got %v", err)
+					}
+				})
+			}
 		}
 	}
 }

@@ -132,7 +132,7 @@ func comprehension(out io.StringWriter, input *syntax.Comprehension, opts *outpu
 	}
 
 	items := []*item{
-		tokenItem(tokens[0], "left token"),
+		tokenItem(tokens[0], "left"),
 		exprItem(input.Body, "Body"),
 	}
 
@@ -162,7 +162,7 @@ func comprehension(out io.StringWriter, input *syntax.Comprehension, opts *outpu
 	}
 
 	items = append(items,
-		tokenItem(tokens[1], "right token"),
+		tokenItem(tokens[1], "right"),
 	)
 
 	return render(out, "rendering comprehension", opts, items...)
