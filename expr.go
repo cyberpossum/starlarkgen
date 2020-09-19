@@ -176,27 +176,31 @@ func binaryExpr(out io.StringWriter, input *syntax.BinaryExpr, opts *outputOpts)
 		return errors.New("rendering binary expression: nil input")
 	}
 
-	items := []*item{
-		exprItem(input.X, "X"),
+	if err := expr(out, input.X, opts); err != nil {
+		return fmt.Errorf("rendering binary expression X: %w", err)
 	}
 
 	if input.Op != syntax.EQ || opts.spaceEqBinary {
-		items = append(items,
-			spaceItem,
-		)
+		if _, err := out.WriteString(space); err != nil {
+			return fmt.Errorf("rendering binary expression space: %w", err)
+		}
 	}
-	items = append(items, tokenItem(input.Op, "Op"))
+
+	if _, err := out.WriteString(input.Op.String()); err != nil {
+		return fmt.Errorf("rendering binary expression Op token: %w", err)
+	}
+
 	if input.Op != syntax.EQ || opts.spaceEqBinary {
-		items = append(items,
-			spaceItem,
-		)
+		if _, err := out.WriteString(space); err != nil {
+			return fmt.Errorf("rendering binary expression space: %w", err)
+		}
 	}
 
-	items = append(items,
-		exprItem(input.Y, "Y"),
-	)
+	if err := expr(out, input.Y, opts); err != nil {
+		return fmt.Errorf("rendering binary expression Y: %w", err)
+	}
 
-	return render(out, "rendering binary expression", opts, items...)
+	return nil
 }
 
 func callExpr(out io.StringWriter, input *syntax.CallExpr, opts *outputOpts) error {
@@ -204,18 +208,23 @@ func callExpr(out io.StringWriter, input *syntax.CallExpr, opts *outputOpts) err
 		return errors.New("rendering call expression: nil input")
 	}
 
-	items := []*item{
-		exprItem(input.Fn, "Fn"),
-		tokenItem(syntax.LPAREN, "LPAREN"),
+	if err := expr(out, input.Fn, opts); err != nil {
+		return fmt.Errorf("rendering call expression Fn: %w", err)
 	}
 
-	items = append(items, exprSequence(input.Args, renderOption(opts.callOption))...)
+	if _, err := out.WriteString(syntax.LPAREN.String()); err != nil {
+		return fmt.Errorf("rendering call expression LPAREN token: %w", err)
+	}
 
-	items = append(items,
-		tokenItem(syntax.RPAREN, "RPAREN"),
-	)
+	if err := outputExprSequence(out, input.Args, renderOption(opts.callOption), opts); err != nil {
+		return fmt.Errorf("rendering call expression: %w", err)
+	}
 
-	return render(out, "rendering call expression", opts, items...)
+	if _, err := out.WriteString(syntax.RPAREN.String()); err != nil {
+		return fmt.Errorf("rendering call expression RPAREN token: %w", err)
+	}
+
+	return nil
 }
 
 func comprehension(out io.StringWriter, input *syntax.Comprehension, opts *outputOpts) error {
