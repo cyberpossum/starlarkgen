@@ -1426,6 +1426,7 @@ func Benchmark_huge_encapsulation_expr(b *testing.B) {
 	var (
 		fooIdent   = &syntax.Ident{Name: "foo"}
 		barIdent   = &syntax.Ident{Name: "bar"}
+		fooLessBar = &syntax.BinaryExpr{Op: syntax.LT, X: fooIdent, Y: barIdent}
 		oneLiteral = &syntax.Literal{Value: 1}
 		tenLiteral = &syntax.Literal{Value: 10}
 	)
@@ -1434,7 +1435,18 @@ func Benchmark_huge_encapsulation_expr(b *testing.B) {
 		for i := 0; i < num; i++ {
 			x = &syntax.IndexExpr{
 				X: &syntax.DictExpr{List: []syntax.Expr{
-					&syntax.DictEntry{Key: fooIdent, Value: &syntax.BinaryExpr{Op: syntax.EQL, X: fooIdent, Y: oneLiteral}},
+					&syntax.DictEntry{Key: fooIdent, Value: &syntax.BinaryExpr{
+						Op: syntax.EQL,
+						X:  &syntax.CondExpr{Cond: fooLessBar, True: fooIdent, False: barIdent},
+						Y: &syntax.Comprehension{
+							Curly: true,
+							Body:  fooIdent,
+							Clauses: []syntax.Node{
+								&syntax.IfClause{Cond: fooLessBar},
+								&syntax.ForClause{X: fooIdent, Vars: barIdent},
+							},
+						},
+					}},
 					&syntax.DictEntry{Key: barIdent, Value: &syntax.ParenExpr{X: &syntax.TupleExpr{List: []syntax.Expr{oneLiteral, tenLiteral}}}},
 				}},
 				Y: &syntax.ParenExpr{X: &syntax.UnaryExpr{Op: syntax.MINUS, X: &syntax.CallExpr{Fn: fooIdent, Args: []syntax.Expr{x, oneLiteral}}}},
