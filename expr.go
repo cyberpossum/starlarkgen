@@ -5,10 +5,108 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"strings"
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 )
+
+const (
+	newline = "\n"
+	space   = " "
+)
+
+type sepType uint8
+
+const (
+	sepNone sepType = iota
+	sepCommaSpace
+	sepCommaNewlineIndent
+)
+
+func outputExprSequence(out io.StringWriter, source []syntax.Expr, ro renderOption, opts *outputOpts) error {
+	var (
+		sep          sepType
+		prefixIndent bool
+		lastComma    bool
+		sourceLen    = len(source)
+		expOpts      *outputOpts
+	)
+	switch ro.multiLineType() {
+	case multiLine:
+		prefixIndent = sourceLen > 0
+	case multiLineMultiple:
+		prefixIndent = sourceLen > 1
+	}
+	switch ro.commaType() {
+	case alwaysLastComma:
+		lastComma = sourceLen > 0
+	case lastCommaTwoAndMore:
+		lastComma = sourceLen > 1
+	}
+
+	if prefixIndent {
+		expOpts = opts.addDepth(1)
+		if _, err := out.WriteString(newline); err != nil {
+			return fmt.Errorf("NEWLINE token: %w", err)
+		}
+		if _, err := out.WriteString(strings.Repeat(opts.indent, expOpts.depth)); err != nil {
+			return fmt.Errorf("indent: %w", err)
+		}
+	}
+
+	for i, arg := range source {
+		switch sep {
+		case sepNone:
+		case sepCommaSpace:
+			if _, err := out.WriteString(syntax.COMMA.String()); err != nil {
+				return fmt.Errorf("COMMA token: %w", err)
+			}
+			if _, err := out.WriteString(space); err != nil {
+				return fmt.Errorf("space: %w", err)
+			}
+		case sepCommaNewlineIndent:
+			if _, err := out.WriteString(syntax.COMMA.String()); err != nil {
+				return fmt.Errorf("COMMA token: %w", err)
+			}
+			if _, err := out.WriteString(newline); err != nil {
+				return fmt.Errorf("NEWLINE token: %w", err)
+			}
+			if _, err := out.WriteString(strings.Repeat(opts.indent, expOpts.depth)); err != nil {
+				return fmt.Errorf("indent: %w", err)
+			}
+		}
+		if prefixIndent {
+			if err := expr(out, arg, expOpts); err != nil {
+				return fmt.Errorf("element %d: %w", i, err)
+			}
+			sep = sepCommaNewlineIndent
+		} else {
+			if err := expr(out, arg, opts); err != nil {
+				return fmt.Errorf("element %d: %w", i, err)
+			}
+			sep = sepCommaSpace
+		}
+	}
+
+	// add last comma if respective option is set
+	if lastComma {
+		if _, err := out.WriteString(syntax.COMMA.String()); err != nil {
+			return fmt.Errorf("COMMA token: %w", err)
+		}
+	}
+	// indent and newline for multiline
+	if prefixIndent {
+		if _, err := out.WriteString(newline); err != nil {
+			return fmt.Errorf("NEWLINE token: %w", err)
+		}
+		if _, err := out.WriteString(strings.Repeat(opts.indent, opts.depth)); err != nil {
+			return fmt.Errorf("indent: %w", err)
+		}
+	}
+
+	return nil
+}
 
 func exprSequence(source []syntax.Expr, ro renderOption) []*item {
 	var (
@@ -190,12 +288,20 @@ func dictEntry(out io.StringWriter, input *syntax.DictEntry, opts *outputOpts) e
 	if input == nil {
 		return errors.New("rendering dict entry: nil input")
 	}
-	return render(out, "rendering dict entry", opts,
-		exprItem(input.Key, "Key"),
-		colonItem,
-		spaceItem,
-		exprItem(input.Value, "Value"),
-	)
+	if err := expr(out, input.Key, opts); err != nil {
+		return fmt.Errorf("rendering dict entry Key: %w", err)
+	}
+	if _, err := out.WriteString(syntax.COLON.String()); err != nil {
+		return fmt.Errorf("rendering dict entry COLON token: %w", err)
+	}
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering dict entry space: %w", err)
+	}
+	if err := expr(out, input.Value, opts); err != nil {
+		return fmt.Errorf("rendering dict entry Value: %w", err)
+	}
+
+	return nil
 }
 
 func dictExpr(out io.StringWriter, input *syntax.DictExpr, opts *outputOpts) error {
@@ -210,15 +316,19 @@ func dictExpr(out io.StringWriter, input *syntax.DictExpr, opts *outputOpts) err
 		}
 	}
 
-	items := []*item{
-		tokenItem(syntax.LBRACE, "LBRACE"),
+	if _, err := out.WriteString(syntax.LBRACE.String()); err != nil {
+		return fmt.Errorf("rendering dict expression LBRACE token: %w", err)
 	}
 
-	items = append(items, exprSequence(input.List, renderOption(opts.dictOption))...)
+	if err := outputExprSequence(out, input.List, renderOption(opts.dictOption), opts); err != nil {
+		return fmt.Errorf("rendering dict expression: %w", err)
+	}
 
-	items = append(items, tokenItem(syntax.RBRACE, "RBRACE"))
+	if _, err := out.WriteString(syntax.RBRACE.String()); err != nil {
+		return fmt.Errorf("rendering dict expression RBRACE token: %w", err)
+	}
 
-	return render(out, "rendering dict expression", opts, items...)
+	return nil
 }
 
 func dotExpr(out io.StringWriter, input *syntax.DotExpr, opts *outputOpts) error {
