@@ -238,41 +238,64 @@ func comprehension(out io.StringWriter, input *syntax.Comprehension, opts *outpu
 		tokens = []syntax.Token{syntax.LBRACE, syntax.RBRACE}
 	}
 
-	items := []*item{
-		tokenItem(tokens[0], "left"),
-		exprItem(input.Body, "Body"),
+	if _, err := out.WriteString(tokens[0].String()); err != nil {
+		return fmt.Errorf("rendering comprehension left token: %w", err)
+	}
+
+	if err := expr(out, input.Body, opts); err != nil {
+		return fmt.Errorf("rendering comprehension Body: %w", err)
 	}
 
 	for _, cl := range input.Clauses {
 		switch t := cl.(type) {
 		case *syntax.ForClause:
-			items = append(items,
-				spaceItem,
-				tokenItem(syntax.FOR, "FOR"),
-				spaceItem,
-				exprItem(t.Vars, "for clause Vars"),
-				spaceItem,
-				tokenItem(syntax.IN, "IN"),
-				spaceItem,
-				exprItem(t.X, "for clause X"),
-			)
+			if _, err := out.WriteString(space); err != nil {
+				return fmt.Errorf("rendering comprehension space: %w", err)
+			}
+			if _, err := out.WriteString(syntax.FOR.String()); err != nil {
+				return fmt.Errorf("rendering comprehension FOR token: %w", err)
+			}
+			if _, err := out.WriteString(space); err != nil {
+				return fmt.Errorf("rendering comprehension space: %w", err)
+			}
+			if err := expr(out, t.Vars, opts); err != nil {
+				return fmt.Errorf("rendering comprehension for clause Vars: %w", err)
+			}
+			if _, err := out.WriteString(space); err != nil {
+				return fmt.Errorf("rendering comprehension space: %w", err)
+			}
+			if _, err := out.WriteString(syntax.IN.String()); err != nil {
+				return fmt.Errorf("rendering comprehension IN token: %w", err)
+			}
+			if _, err := out.WriteString(space); err != nil {
+				return fmt.Errorf("rendering comprehension space: %w", err)
+			}
+			if err := expr(out, t.X, opts); err != nil {
+				return fmt.Errorf("rendering comprehension for clause X: %w", err)
+			}
 		case *syntax.IfClause:
-			items = append(items,
-				spaceItem,
-				tokenItem(syntax.IF, "IF"),
-				spaceItem,
-				exprItem(t.Cond, "if clause Cond"),
-			)
+			if _, err := out.WriteString(space); err != nil {
+				return fmt.Errorf("rendering comprehension space: %w", err)
+			}
+			if _, err := out.WriteString(syntax.IF.String()); err != nil {
+				return fmt.Errorf("rendering comprehension IF token: %w", err)
+			}
+			if _, err := out.WriteString(space); err != nil {
+				return fmt.Errorf("rendering comprehension space: %w", err)
+			}
+			if err := expr(out, t.Cond, opts); err != nil {
+				return fmt.Errorf("rendering comprehension if clause Cond: %w", err)
+			}
 		default:
 			return fmt.Errorf("unexpected clause type %T rendering comprehension", t)
 		}
 	}
 
-	items = append(items,
-		tokenItem(tokens[1], "right"),
-	)
+	if _, err := out.WriteString(tokens[1].String()); err != nil {
+		return fmt.Errorf("rendering comprehension right token: %w", err)
+	}
 
-	return render(out, "rendering comprehension", opts, items...)
+	return nil
 }
 
 func condExpr(out io.StringWriter, input *syntax.CondExpr, opts *outputOpts) error {
@@ -280,17 +303,35 @@ func condExpr(out io.StringWriter, input *syntax.CondExpr, opts *outputOpts) err
 		return errors.New("rendering condition expression: nil input")
 	}
 
-	return render(out, "rendering condition expression", opts,
-		exprItem(input.True, "True"),
-		spaceItem,
-		tokenItem(syntax.IF, "IF"),
-		spaceItem,
-		exprItem(input.Cond, "Cond"),
-		spaceItem,
-		tokenItem(syntax.ELSE, "ELSE"),
-		spaceItem,
-		exprItem(input.False, "False"),
-	)
+	if err := expr(out, input.True, opts); err != nil {
+		return fmt.Errorf("rendering condition expression True: %w", err)
+	}
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering condition expression space: %w", err)
+	}
+	if _, err := out.WriteString(syntax.IF.String()); err != nil {
+		return fmt.Errorf("rendering condition expression IF token: %w", err)
+	}
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering condition expression space: %w", err)
+	}
+	if err := expr(out, input.Cond, opts); err != nil {
+		return fmt.Errorf("rendering condition expression Cond: %w", err)
+	}
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering condition expression space: %w", err)
+	}
+	if _, err := out.WriteString(syntax.ELSE.String()); err != nil {
+		return fmt.Errorf("rendering condition expression ELSE token: %w", err)
+	}
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering condition expression space: %w", err)
+	}
+	if err := expr(out, input.False, opts); err != nil {
+		return fmt.Errorf("rendering condition expression False: %w", err)
+	}
+
+	return nil
 }
 
 func dictEntry(out io.StringWriter, input *syntax.DictEntry, opts *outputOpts) error {
