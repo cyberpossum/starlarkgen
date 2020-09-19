@@ -1470,7 +1470,7 @@ func Benchmark_huge_encapsulation_expr(b *testing.B) {
 							Body:  fooIdent,
 							Clauses: []syntax.Node{
 								&syntax.IfClause{Cond: fooLessBar},
-								&syntax.ForClause{X: fooIdent, Vars: barIdent},
+								&syntax.ForClause{X: &syntax.SliceExpr{X: fooIdent, Hi: tenLiteral, Lo: oneLiteral, Step: oneLiteral}, Vars: barIdent},
 							},
 						},
 					}},
