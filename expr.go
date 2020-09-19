@@ -481,7 +481,11 @@ func tupleExpr(out io.StringWriter, input *syntax.TupleExpr, opts *outputOpts) e
 		return errors.New("rendering tuple expression: nil input")
 	}
 
-	return render(out, "rendering tuple expression", opts, exprSequence(input.List, renderOption(opts.tupleOption))...)
+	if err := outputExprSequence(out, input.List, renderOption(opts.tupleOption), opts); err != nil {
+		return fmt.Errorf("rendering tuple expression: %w", err)
+	}
+
+	return nil
 }
 
 func unaryExpr(out io.StringWriter, input *syntax.UnaryExpr, opts *outputOpts) error {
