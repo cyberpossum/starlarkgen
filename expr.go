@@ -386,11 +386,17 @@ func dotExpr(out io.StringWriter, input *syntax.DotExpr, opts *outputOpts) error
 		return errors.New("rendering dot expression: nil input")
 	}
 
-	return render(out, "rendering dot expression", opts,
-		exprItem(input.X, "X"),
-		tokenItem(syntax.DOT, "DOT"),
-		exprItem(input.Name, "Name"),
-	)
+	if err := expr(out, input.X, opts); err != nil {
+		return fmt.Errorf("rendering dot expression X: %w", err)
+	}
+	if _, err := out.WriteString(syntax.DOT.String()); err != nil {
+		return fmt.Errorf("rendering dot expression DOT token: %w", err)
+	}
+	if err := expr(out, input.Name, opts); err != nil {
+		return fmt.Errorf("rendering dot expression Name: %w", err)
+	}
+
+	return nil
 }
 
 func ident(out io.StringWriter, input *syntax.Ident, opts *outputOpts) error {
@@ -430,15 +436,19 @@ func listExpr(out io.StringWriter, input *syntax.ListExpr, opts *outputOpts) err
 	if input == nil {
 		return errors.New("rendering list expression: nil input")
 	}
-
-	items := []*item{
-		tokenItem(syntax.LBRACK, "LBRACK"),
+	if _, err := out.WriteString(syntax.LBRACK.String()); err != nil {
+		return fmt.Errorf("rendering list expression LBRACK token: %w", err)
 	}
 
-	items = append(items, exprSequence(input.List, renderOption(opts.listOption))...)
+	if err := outputExprSequence(out, input.List, renderOption(opts.listOption), opts); err != nil {
+		return fmt.Errorf("rendering list expression: %w", err)
+	}
 
-	items = append(items, tokenItem(syntax.RBRACK, "RBRACK"))
-	return render(out, "rendering list expression", opts, items...)
+	if _, err := out.WriteString(syntax.RBRACK.String()); err != nil {
+		return fmt.Errorf("rendering list expression RBRACK token: %w", err)
+	}
+
+	return nil
 }
 
 func literal(out io.StringWriter, input *syntax.Literal, opts *outputOpts) error {
