@@ -462,36 +462,42 @@ func sliceExpr(out io.StringWriter, input *syntax.SliceExpr, opts *outputOpts) e
 		return errors.New("rendering slice expression: nil input")
 	}
 
-	items := []*item{
-		exprItem(input.X, "X"),
-		tokenItem(syntax.LBRACK, "LBRACK"),
+	if err := expr(out, input.X, opts); err != nil {
+		return fmt.Errorf("rendering slice expression X: %w", err)
+	}
+	if _, err := out.WriteString(syntax.LBRACK.String()); err != nil {
+		return fmt.Errorf("rendering slice expression LBRACK token: %w", err)
 	}
 
 	if input.Lo != nil {
-		items = append(items,
-			exprItem(input.Lo, "Lo"),
-		)
+		if err := expr(out, input.Lo, opts); err != nil {
+			return fmt.Errorf("rendering slice expression Lo: %w", err)
+		}
 	}
 
-	items = append(items,
-		colonItem,
-	)
+	if _, err := out.WriteString(syntax.COLON.String()); err != nil {
+		return fmt.Errorf("rendering slice expression COLON token: %w", err)
+	}
 
 	if input.Hi != nil {
-		items = append(items,
-			exprItem(input.Hi, "Hi"),
-		)
+		if err := expr(out, input.Hi, opts); err != nil {
+			return fmt.Errorf("rendering slice expression Hi: %w", err)
+		}
 	}
 	if input.Step != nil {
-		items = append(items,
-			colonItem,
-			exprItem(input.Step, "Step"),
-		)
+		if _, err := out.WriteString(syntax.COLON.String()); err != nil {
+			return fmt.Errorf("rendering slice expression COLON token: %w", err)
+		}
+		if err := expr(out, input.Step, opts); err != nil {
+			return fmt.Errorf("rendering slice expression Step: %w", err)
+		}
 	}
-	items = append(items,
-		tokenItem(syntax.RBRACK, "RBRACK"),
-	)
-	return render(out, "rendering slice expression", opts, items...)
+
+	if _, err := out.WriteString(syntax.RBRACK.String()); err != nil {
+		return fmt.Errorf("rendering slice expression RBRACK token: %w", err)
+	}
+
+	return nil
 }
 
 func tupleExpr(out io.StringWriter, input *syntax.TupleExpr, opts *outputOpts) error {
