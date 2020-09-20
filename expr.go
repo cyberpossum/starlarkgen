@@ -13,6 +13,7 @@ import (
 const (
 	newline = "\n"
 	space   = " "
+	quote   = "\""
 )
 
 type sepType uint8

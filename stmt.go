@@ -9,6 +9,36 @@ import (
 	"go.starlark.net/syntax"
 )
 
+var (
+	tripleQuote = strings.Repeat(quote, 3)
+)
+
+func stmtSequence(out io.StringWriter, input []syntax.Stmt, opts *outputOpts) error {
+	stOpts := opts.addDepth(1)
+	for ii, st := range input {
+		if err := stmt(out, st, stOpts); err != nil {
+			return fmt.Errorf("statement index %d: %w", ii, err)
+		}
+	}
+	return nil
+}
+
+func hasSpacePrefix(s string, l int) bool {
+	if len(s) < l {
+		return false
+	}
+	for i, r := range s {
+		if i == l {
+			return true
+		}
+		if r != ' ' {
+			return false
+		}
+	}
+
+	return true
+}
+
 func assignStmt(out io.StringWriter, input *syntax.AssignStmt, opts *outputOpts) error {
 	if input == nil {
 		return errors.New("rendering assign statement: nil input")
@@ -22,15 +52,29 @@ func assignStmt(out io.StringWriter, input *syntax.AssignStmt, opts *outputOpts)
 		return fmt.Errorf("rendering assign statement: unsupported Op token %v, expected one of: %v, %v, %v, %v, %v", input.Op, syntax.EQ, syntax.PLUS_EQ, syntax.MINUS_EQ, syntax.STAR_EQ, syntax.PERCENT_EQ)
 	}
 
-	return render(out, "rendering assignment statement", opts,
-		indentItem,
-		exprItem(input.LHS, "LHS"),
-		spaceItem,
-		tokenItem(input.Op, "Op"),
-		spaceItem,
-		exprItem(input.RHS, "RHS"),
-		newlineItem,
-	)
+	if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+		return fmt.Errorf("rendering assignment statement indent: %w", err)
+	}
+	if err := expr(out, input.LHS, opts); err != nil {
+		return fmt.Errorf("rendering assignment statement LHS: %w", err)
+	}
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering assignment statement space: %w", err)
+	}
+	if _, err := out.WriteString(input.Op.String()); err != nil {
+		return fmt.Errorf("rendering assignment statement Op token: %w", err)
+	}
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering assignment statement space: %w", err)
+	}
+	if err := expr(out, input.RHS, opts); err != nil {
+		return fmt.Errorf("rendering assignment statement RHS: %w", err)
+	}
+	if _, err := out.WriteString(newline); err != nil {
+		return fmt.Errorf("rendering assignment statement NEWLINE token: %w", err)
+	}
+
+	return nil
 }
 
 func branchStmt(out io.StringWriter, input *syntax.BranchStmt, opts *outputOpts) error {
@@ -45,12 +89,16 @@ func branchStmt(out io.StringWriter, input *syntax.BranchStmt, opts *outputOpts)
 	default:
 		return fmt.Errorf("rendering branch statement: unsupported token %v, expected %v, %v or %v", input.Token, syntax.BREAK, syntax.CONTINUE, syntax.PASS)
 	}
-
-	return render(out, "rendering branch statement", opts,
-		indentItem,
-		tokenItem(input.Token, "Token"),
-		newlineItem,
-	)
+	if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+		return fmt.Errorf("rendering branch statement indent: %w", err)
+	}
+	if _, err := out.WriteString(input.Token.String()); err != nil {
+		return fmt.Errorf("rendering branch statement Token token: %w", err)
+	}
+	if _, err := out.WriteString(newline); err != nil {
+		return fmt.Errorf("rendering branch statement NEWLINE token: %w", err)
+	}
+	return nil
 }
 
 func defStmt(out io.StringWriter, input *syntax.DefStmt, opts *outputOpts) error {
@@ -58,29 +106,94 @@ func defStmt(out io.StringWriter, input *syntax.DefStmt, opts *outputOpts) error
 		return errors.New("rendering def statement: nil input")
 	}
 
-	items := []*item{
-		indentItem,
-		tokenItem(syntax.DEF, "DEF"),
-		spaceItem,
-		exprItem(input.Name, "Name"),
-		tokenItem(syntax.LPAREN, "LPAREN"),
+	if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+		return fmt.Errorf("rendering def statement indent: %w", err)
 	}
-	var sep []*item
-	for i, param := range input.Params {
-		items = append(items,
-			sep...)
-		items = append(items,
-			exprItem(param, fmt.Sprintf("param %d", i)),
-		)
-		sep = commaSpace
+	if _, err := out.WriteString(syntax.DEF.String()); err != nil {
+		return fmt.Errorf("rendering def statement DEF token: %w", err)
 	}
-	items = append(items,
-		tokenItem(syntax.RPAREN, "RPAREN"),
-		colonItem,
-		newlineItem,
-		stmtsItem(input.Body, "Body", true),
-	)
-	return render(out, "rendering def statement", opts, items...)
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering def statement space: %w", err)
+	}
+	if err := expr(out, input.Name, opts); err != nil {
+		return fmt.Errorf("rendering def statement Name: %w", err)
+	}
+	if _, err := out.WriteString(syntax.LPAREN.String()); err != nil {
+		return fmt.Errorf("rendering def statement LPAREN token: %w", err)
+	}
+	// TODO: add def rendering options
+	if err := exprSequence(out, input.Params, renderOption(0), opts); err != nil {
+		return fmt.Errorf("rendering def statement Params: %w", err)
+	}
+	if _, err := out.WriteString(syntax.RPAREN.String()); err != nil {
+		return fmt.Errorf("rendering def statement RPAREN token: %w", err)
+	}
+	if _, err := out.WriteString(syntax.COLON.String()); err != nil {
+		return fmt.Errorf("rendering def statement COLON token: %w", err)
+	}
+	if _, err := out.WriteString(newline); err != nil {
+		return fmt.Errorf("rendering def statement NEWLINE token: %w", err)
+	}
+	if err := stmtSequence(out, input.Body, opts); err != nil {
+		return fmt.Errorf("rendering def statement Body: %w", err)
+	}
+	return nil
+}
+
+func docstring(out io.StringWriter, input *syntax.Literal, strValue string, opts *outputOpts) error {
+	// if the literal was obtained from the parser, the whitespace might
+	// be present before the token, use position to strip it
+	var stripPrefix int32
+
+	if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+		return fmt.Errorf("rendering expression statement indent: %w", err)
+	}
+	if _, err := out.WriteString(tripleQuote); err != nil {
+		return fmt.Errorf("rendering expression statement TRIPLE QUOTE token: %w", err)
+	}
+
+	// .Col value is 1-based
+	if input.Token == syntax.STRING && input.TokenPos.Col > 1 {
+		stripPrefix = input.TokenPos.Col - 1
+	}
+
+	lines := strings.Split(strings.ReplaceAll(strValue, `"""`, `\"\"\"`), "\n")
+
+	if _, err := out.WriteString(lines[0]); err != nil {
+		return fmt.Errorf("rendering expression statement: docstring line 1: %w", err)
+	}
+
+	for i := 1; i < len(lines); i++ {
+		line := lines[i]
+		if stripPrefix > 0 && hasSpacePrefix(line, int(stripPrefix)) {
+			line = line[stripPrefix:]
+		}
+		if len(line) > 0 || i == len(lines)-1 {
+			if _, err := out.WriteString(newline); err != nil {
+				return fmt.Errorf("rendering expression statement NEWLINE token: %w", err)
+			}
+			if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+				return fmt.Errorf("rendering expression statement indent: %w", err)
+			}
+			if _, err := out.WriteString(line); err != nil {
+				return fmt.Errorf("rendering expression statement: docstring line %d: %w", i+1, err)
+			}
+		} else {
+			// do not add extra indent spaces for empty doc lines, unless it's a last one
+			if _, err := out.WriteString(newline); err != nil {
+				return fmt.Errorf("rendering expression statement NEWLINE token: %w", err)
+			}
+		}
+	}
+
+	if _, err := out.WriteString(tripleQuote); err != nil {
+		return fmt.Errorf("rendering expression statement TRIPLE QUOTE token: %w", err)
+	}
+	if _, err := out.WriteString(newline); err != nil {
+		return fmt.Errorf("rendering expression statement NEWLINE token: %w", err)
+	}
+
+	return nil
 }
 
 func exprStmt(out io.StringWriter, input *syntax.ExprStmt, opts *outputOpts) error {
@@ -96,58 +209,21 @@ func exprStmt(out io.StringWriter, input *syntax.ExprStmt, opts *outputOpts) err
 	//     """
 	if lt, ok := input.X.(*syntax.Literal); ok {
 		if strValue, ok := lt.Value.(string); ok {
-			// if the literal was obtained from the parser, the whitespace might
-			// be present before the token, use position to strip it
-			var stripPrefix string
-
-			// .Col value is 1-based
-			if lt.Token == syntax.STRING && lt.TokenPos.Col > 1 {
-				stripPrefix = strings.Repeat(" ", int(lt.TokenPos.Col-1))
-			}
-
-			lines := strings.Split(strings.ReplaceAll(strValue, `"""`, `\"\"\"`), "\n")
-			items := []*item{
-				indentItem,
-				quoteItem,
-				quoteItem,
-				quoteItem,
-				stringItem(lines[0], "docstring line 1"),
-			}
-			for i := 1; i < len(lines); i++ {
-				line := lines[i]
-				if stripPrefix != "" && strings.HasPrefix(line, stripPrefix) {
-					line = line[len(stripPrefix):]
-				}
-				if len(line) > 0 || i == len(lines)-1 {
-					items = append(items,
-						newlineItem,
-						indentItem,
-						stringItem(line, fmt.Sprintf("docstring line %d", i+1)),
-					)
-				} else {
-					// do not add extra indent spaces for empty doc lines, unless it's a last one
-					items = append(items,
-						newlineItem,
-					)
-				}
-			}
-			items = append(items,
-				quoteItem,
-				quoteItem,
-				quoteItem,
-				newlineItem,
-			)
-			return render(out, "rendering expression statement", opts,
-				items...,
-			)
+			return docstring(out, lt, strValue, opts)
 		}
 	}
 
-	return render(out, "rendering expression statement", opts,
-		indentItem,
-		exprItem(input.X, "X"),
-		newlineItem,
-	)
+	if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+		return fmt.Errorf("rendering expression statement indent: %w", err)
+	}
+	if err := expr(out, input.X, opts); err != nil {
+		return fmt.Errorf("rendering expression statement X: %w", err)
+	}
+	if _, err := out.WriteString(newline); err != nil {
+		return fmt.Errorf("rendering expression statement NEWLINE token: %w", err)
+	}
+
+	return nil
 }
 
 func forStmt(out io.StringWriter, input *syntax.ForStmt, opts *outputOpts) error {
@@ -155,19 +231,41 @@ func forStmt(out io.StringWriter, input *syntax.ForStmt, opts *outputOpts) error
 		return errors.New("rendering for statement: nil input")
 	}
 
-	return render(out, "rendering for statement", opts,
-		indentItem,
-		tokenItem(syntax.FOR, "FOR"),
-		spaceItem,
-		exprItem(input.Vars, "Vars"),
-		spaceItem,
-		tokenItem(syntax.IN, "IN"),
-		spaceItem,
-		exprItem(input.X, "X"),
-		colonItem,
-		newlineItem,
-		stmtsItem(input.Body, "Body", true),
-	)
+	if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+		return fmt.Errorf("rendering for statement indent: %w", err)
+	}
+	if _, err := out.WriteString(syntax.FOR.String()); err != nil {
+		return fmt.Errorf("rendering for statement FOR token: %w", err)
+	}
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering for statement space: %w", err)
+	}
+	if err := expr(out, input.Vars, opts); err != nil {
+		return fmt.Errorf("rendering for statement Vars: %w", err)
+	}
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering for statement space: %w", err)
+	}
+	if _, err := out.WriteString(syntax.IN.String()); err != nil {
+		return fmt.Errorf("rendering for statement IN token: %w", err)
+	}
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering for statement space: %w", err)
+	}
+	if err := expr(out, input.X, opts); err != nil {
+		return fmt.Errorf("rendering for statement X: %w", err)
+	}
+	if _, err := out.WriteString(syntax.COLON.String()); err != nil {
+		return fmt.Errorf("rendering for statement COLON token: %w", err)
+	}
+	if _, err := out.WriteString(newline); err != nil {
+		return fmt.Errorf("rendering for statement NEWLINE token: %w", err)
+	}
+	if err := stmtSequence(out, input.Body, opts); err != nil {
+		return fmt.Errorf("rendering for statement Body: %w", err)
+	}
+
+	return nil
 }
 
 func ifStmt(out io.StringWriter, input *syntax.IfStmt, opts *outputOpts) error {
@@ -175,75 +273,118 @@ func ifStmt(out io.StringWriter, input *syntax.IfStmt, opts *outputOpts) error {
 		return errors.New("rendering if statement: nil input")
 	}
 
-	items := []*item{
-		indentItem,
-		tokenItem(syntax.IF, "IF"),
-		spaceItem,
-		exprItem(input.Cond, "Cond"),
-		colonItem,
-		newlineItem,
-		stmtsItem(input.True, "True", true),
+	if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+		return fmt.Errorf("rendering if statement indent: %w", err)
 	}
-	if len(input.False) > 0 {
-		items = append(items,
-			indentItem,
-			tokenItem(syntax.ELSE, "ELSE"),
-			colonItem,
-			newlineItem,
-			stmtsItem(input.False, "False", true),
-		)
+	if _, err := out.WriteString(syntax.IF.String()); err != nil {
+		return fmt.Errorf("rendering if statement IF token: %w", err)
+	}
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering if statement space: %w", err)
+	}
+	if err := expr(out, input.Cond, opts); err != nil {
+		return fmt.Errorf("rendering if statement Cond: %w", err)
+	}
+	if _, err := out.WriteString(syntax.COLON.String()); err != nil {
+		return fmt.Errorf("rendering if statement COLON token: %w", err)
+	}
+	if _, err := out.WriteString(newline); err != nil {
+		return fmt.Errorf("rendering if statement NEWLINE token: %w", err)
+	}
+	if err := stmtSequence(out, input.True, opts); err != nil {
+		return fmt.Errorf("rendering if statement True: %w", err)
 	}
 
-	return render(out, "rendering if statement", opts, items...)
+	if len(input.False) > 0 {
+		if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+			return fmt.Errorf("rendering if statement indent: %w", err)
+		}
+		if _, err := out.WriteString(syntax.ELSE.String()); err != nil {
+			return fmt.Errorf("rendering if statement ELSE token: %w", err)
+		}
+		if _, err := out.WriteString(syntax.COLON.String()); err != nil {
+			return fmt.Errorf("rendering if statement COLON token: %w", err)
+		}
+		if _, err := out.WriteString(newline); err != nil {
+			return fmt.Errorf("rendering if statement NEWLINE token: %w", err)
+		}
+		if err := stmtSequence(out, input.False, opts); err != nil {
+			return fmt.Errorf("rendering if statement False: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func loadStmt(out io.StringWriter, input *syntax.LoadStmt, opts *outputOpts) error {
 	if input == nil {
 		return errors.New("rendering load statement: nil input")
 	}
-
 	if len(input.From) != len(input.To) {
 		return fmt.Errorf("rendering load statement, lengths mismatch, From: %d, To: %d", len(input.From), len(input.To))
 	}
-	items := []*item{
-		indentItem,
-		tokenItem(syntax.LOAD, "LOAD"),
-		tokenItem(syntax.LPAREN, "LPAREN"),
-		exprItem(input.Module, "Module"),
+
+	if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+		return fmt.Errorf("rendering load statement indent: %w", err)
 	}
+	if _, err := out.WriteString(syntax.LOAD.String()); err != nil {
+		return fmt.Errorf("rendering load statement LOAD token: %w", err)
+	}
+	if _, err := out.WriteString(syntax.LPAREN.String()); err != nil {
+		return fmt.Errorf("rendering load statement LPAREN token: %w", err)
+	}
+	if err := expr(out, input.Module, opts); err != nil {
+		return fmt.Errorf("rendering load statement Module: %w", err)
+	}
+
 	for i, elem := range input.From {
-		items = append(items,
-			tokenItem(syntax.COMMA, "COMMA"),
-			spaceItem,
-		)
+		// load statement must import at least 1 symbol
+		if _, err := out.WriteString(syntax.COMMA.String()); err != nil {
+			return fmt.Errorf("rendering load statement COMMA token: %w", err)
+		}
+		if _, err := out.WriteString(space); err != nil {
+			return fmt.Errorf("rendering load statement space: %w", err)
+		}
 		if input.To[i] != nil && input.To[i].Name != elem.Name {
-			items = append(items,
-				exprItem(input.To[i], fmt.Sprintf("To[%d]", i)),
-			)
+			if err := expr(out, input.To[i], opts); err != nil {
+				return fmt.Errorf("rendering load statement To[%d]: %w", i, err)
+			}
 			// spaces around "=" if the option is set
 			if opts.spaceEqBinary {
-				items = append(items,
-					spaceItem,
-					tokenItem(syntax.EQ, "EQ"),
-					spaceItem,
-				)
+				if _, err := out.WriteString(space); err != nil {
+					return fmt.Errorf("rendering load statement space: %w", err)
+				}
+				if _, err := out.WriteString(syntax.EQ.String()); err != nil {
+					return fmt.Errorf("rendering load statement EQ token: %w", err)
+				}
+				if _, err := out.WriteString(space); err != nil {
+					return fmt.Errorf("rendering load statement space: %w", err)
+				}
 			} else {
-				items = append(items,
-					tokenItem(syntax.EQ, "EQ"),
-				)
+				if _, err := out.WriteString(syntax.EQ.String()); err != nil {
+					return fmt.Errorf("rendering load statement EQ token: %w", err)
+				}
 			}
 		}
-		items = append(items,
-			quoteItem,
-			exprItem(elem, fmt.Sprintf("From[%d]", i)),
-			quoteItem,
-		)
+		if _, err := out.WriteString(quote); err != nil {
+			return fmt.Errorf("rendering load statement QUOTE token: %w", err)
+		}
+		if err := expr(out, elem, opts); err != nil {
+			return fmt.Errorf("rendering load statement From[%d]: %w", i, err)
+		}
+		if _, err := out.WriteString(quote); err != nil {
+			return fmt.Errorf("rendering load statement QUOTE token: %w", err)
+		}
 	}
-	items = append(items,
-		tokenItem(syntax.RPAREN, "RPAREN"),
-		newlineItem,
-	)
-	return render(out, "rendering load statement", opts, items...)
+
+	if _, err := out.WriteString(syntax.RPAREN.String()); err != nil {
+		return fmt.Errorf("rendering load statement RPAREN token: %w", err)
+	}
+	if _, err := out.WriteString(newline); err != nil {
+		return fmt.Errorf("rendering load statement NEWLINE token: %w", err)
+	}
+
+	return nil
 }
 
 func returnStmt(out io.StringWriter, input *syntax.ReturnStmt, opts *outputOpts) error {
@@ -251,22 +392,27 @@ func returnStmt(out io.StringWriter, input *syntax.ReturnStmt, opts *outputOpts)
 		return errors.New("rendering return statement: nil input")
 	}
 
-	items := []*item{
-		indentItem,
-		tokenItem(syntax.RETURN, "RETURN"),
+	if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+		return fmt.Errorf("rendering return statement indent: %w", err)
+	}
+	if _, err := out.WriteString(syntax.RETURN.String()); err != nil {
+		return fmt.Errorf("rendering return statement RETURN token: %w", err)
 	}
 
 	if input.Result != nil {
-		items = append(items,
-			spaceItem,
-			exprItem(input.Result, "Result"),
-		)
+		if _, err := out.WriteString(space); err != nil {
+			return fmt.Errorf("rendering return statement space: %w", err)
+		}
+		if err := expr(out, input.Result, opts); err != nil {
+			return fmt.Errorf("rendering return statement Result: %w", err)
+		}
 	}
 
-	items = append(items,
-		newlineItem,
-	)
-	return render(out, "rendering return statement", opts, items...)
+	if _, err := out.WriteString(newline); err != nil {
+		return fmt.Errorf("rendering return statement NEWLINE token: %w", err)
+	}
+
+	return nil
 }
 
 func whileStmt(out io.StringWriter, input *syntax.WhileStmt, opts *outputOpts) error {
@@ -274,15 +420,29 @@ func whileStmt(out io.StringWriter, input *syntax.WhileStmt, opts *outputOpts) e
 		return errors.New("rendering while statement: nil input")
 	}
 
-	return render(out, "rendering while statement", opts,
-		indentItem,
-		tokenItem(syntax.WHILE, "WHILE"),
-		spaceItem,
-		exprItem(input.Cond, "Cond"),
-		colonItem,
-		newlineItem,
-		stmtsItem(input.Body, "Body", true),
-	)
+	if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+		return fmt.Errorf("rendering while statement indent: %w", err)
+	}
+	if _, err := out.WriteString(syntax.WHILE.String()); err != nil {
+		return fmt.Errorf("rendering while statement WHILE token: %w", err)
+	}
+	if _, err := out.WriteString(space); err != nil {
+		return fmt.Errorf("rendering while statement space: %w", err)
+	}
+	if err := expr(out, input.Cond, opts); err != nil {
+		return fmt.Errorf("rendering while statement Cond: %w", err)
+	}
+	if _, err := out.WriteString(syntax.COLON.String()); err != nil {
+		return fmt.Errorf("rendering while statement COLON token: %w", err)
+	}
+	if _, err := out.WriteString(newline); err != nil {
+		return fmt.Errorf("rendering while statement NEWLINE token: %w", err)
+	}
+	if err := stmtSequence(out, input.Body, opts); err != nil {
+		return fmt.Errorf("rendering while statement Body: %w", err)
+	}
+
+	return nil
 }
 
 func stmt(out io.StringWriter, input syntax.Stmt, opts *outputOpts) error {
