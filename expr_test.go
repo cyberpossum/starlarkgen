@@ -1127,10 +1127,12 @@ func Test_writerFailureExpr(t *testing.T) {
 			newExpectingWriters("+=", 1, "rendering assignment statement Op token:"),
 			newExpectingWriters(" ", 2, "rendering assignment statement space:"),
 			newExpectingWriters("\n", 1, "rendering assignment statement NEWLINE token:"),
+			newExpectingWriters("+", 1, "rendering assignment statement indent:", WithDepth(1), WithIndent("+")),
 		},
 		&syntax.BranchStmt{Token: syntax.PASS}: {
 			newExpectingWriters("pass", 1, "rendering branch statement Token token:"),
 			newExpectingWriters("\n", 1, "rendering branch statement NEWLINE token:"),
+			newExpectingWriters("+", 1, "rendering branch statement indent:", WithDepth(1), WithIndent("+")),
 		},
 		&syntax.DefStmt{
 			Name:   fooIdent,
@@ -1140,14 +1142,46 @@ func Test_writerFailureExpr(t *testing.T) {
 			},
 		}: {
 			newExpectingWriters("foo", 1, "rendering def statement Name: rendering ident Name:"),
-			newExpectingWriters("x", 1, "rendering def statement param 0: rendering ident Name:"),
-			newExpectingWriters("y", 1, "rendering def statement param 1: rendering ident Name:"),
+			newExpectingWriters("x", 1, "rendering def statement Params: element 0: rendering ident Name:"),
+			newExpectingWriters("y", 1, "rendering def statement Params: element 1: rendering ident Name:"),
 			newExpectingWriters("(", 1, "rendering def statement LPAREN token:"),
 			newExpectingWriters(")", 1, "rendering def statement RPAREN token:"),
 			newExpectingWriters(":", 1, "rendering def statement COLON token:"),
 			newExpectingWriters("def", 1, "rendering def statement DEF token:"),
-			newExpectingWriters(" ", 2, "rendering def statement space:"),
-			newExpectingWriters(",", 1, "rendering def statement COMMA token:"),
+			newExpectingWriters(",", 1, "rendering def statement Params: COMMA token:"),
+			newExpectingWriters("pass", 1, "rendering def statement Body: statement index 0: rendering branch statement Token token:"),
+			[]wantSetup{
+				{
+					writerSetup: newExpectingWriter(" ", 1, true),
+					wantErr:     "rendering def statement space: AS EXPECTED: \" \" occurence 1",
+				},
+				{
+					writerSetup: newExpectingWriter(" ", 2, true),
+					wantErr:     "rendering def statement Params: space: AS EXPECTED: \" \" occurence 2",
+				},
+				{
+					writerSetup: newExpectingWriter(" ", 3, false),
+				},
+				{
+					writerSetup: newExpectingWriter("+", 1, true),
+					wantErr:     "rendering def statement indent: AS EXPECTED: \"+\" occurence 1",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+				{
+					writerSetup: newExpectingWriter("+", 2, true),
+					wantErr:     "rendering def statement Body: statement index 0: rendering branch statement indent: AS EXPECTED: \"+\" occurence 2",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+				{
+					writerSetup: newExpectingWriter("+", 3, true),
+					wantErr:     "rendering def statement Body: statement index 0: rendering branch statement indent: AS EXPECTED: \"+\" occurence 3",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+				{
+					writerSetup: newExpectingWriter("+", 4, false),
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+			},
 			[]wantSetup{
 				{
 					writerSetup: newExpectingWriter("\n", 1, true),
@@ -1155,15 +1189,14 @@ func Test_writerFailureExpr(t *testing.T) {
 				},
 				{
 					writerSetup: newExpectingWriter("\n", 2, true),
-					wantErr:     "rendering def statement, rendering Body statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 2",
+					wantErr:     "rendering def statement Body: statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 2",
 				},
 				{writerSetup: newExpectingWriter("\n", 3, false)},
 			},
-			newExpectingWriters("    ", 1, "rendering def statement, rendering Body statement index 0: rendering branch statement indent:"),
-			newExpectingWriters("pass", 1, "rendering def statement, rendering Body statement index 0: rendering branch statement Token token:"),
 		},
 		&syntax.ExprStmt{X: xIdent}: {
 			newExpectingWriters("x", 1, "rendering expression statement X: rendering ident Name:"),
+			newExpectingWriters("+", 1, "rendering expression statement indent:", WithDepth(1), WithIndent("+")),
 		},
 		&syntax.ForStmt{X: xIdent, Vars: yIdent, Body: []syntax.Stmt{
 			&syntax.BranchStmt{Token: syntax.PASS},
@@ -1174,8 +1207,7 @@ func Test_writerFailureExpr(t *testing.T) {
 			newExpectingWriters("in", 1, "rendering for statement IN token:"),
 			newExpectingWriters(" ", 3, "rendering for statement space:"),
 			newExpectingWriters(":", 1, "rendering for statement COLON token:"),
-			newExpectingWriters("pass", 1, "rendering for statement, rendering Body statement index 0: rendering branch statement Token token:"),
-			newExpectingWriters("    ", 1, "rendering for statement, rendering Body statement index 0: rendering branch statement indent:"),
+			newExpectingWriters("pass", 1, "rendering for statement Body: statement index 0: rendering branch statement Token token:"),
 			[]wantSetup{
 				{
 					writerSetup: newExpectingWriter("\n", 1, true),
@@ -1183,9 +1215,30 @@ func Test_writerFailureExpr(t *testing.T) {
 				},
 				{
 					writerSetup: newExpectingWriter("\n", 2, true),
-					wantErr:     "rendering for statement, rendering Body statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 2",
+					wantErr:     "rendering for statement Body: statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 2",
 				},
 				{writerSetup: newExpectingWriter("\n", 3, false)},
+			},
+			[]wantSetup{
+				{
+					writerSetup: newExpectingWriter("+", 1, true),
+					wantErr:     "rendering for statement indent: AS EXPECTED: \"+\" occurence 1",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+				{
+					writerSetup: newExpectingWriter("+", 2, true),
+					wantErr:     "rendering for statement Body: statement index 0: rendering branch statement indent: AS EXPECTED: \"+\" occurence 2",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+				{
+					writerSetup: newExpectingWriter("+", 3, true),
+					wantErr:     "rendering for statement Body: statement index 0: rendering branch statement indent: AS EXPECTED: \"+\" occurence 3",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+				{
+					writerSetup: newExpectingWriter("+", 4, false),
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
 			},
 		},
 		&syntax.IfStmt{
@@ -1196,8 +1249,8 @@ func Test_writerFailureExpr(t *testing.T) {
 			newExpectingWriters("foo_cond", 1, "rendering if statement Cond: rendering ident Name:"),
 			newExpectingWriters("if", 1, "rendering if statement IF token:"),
 			newExpectingWriters("else", 1, "rendering if statement ELSE token:"),
-			newExpectingWriters("pass", 1, "rendering if statement, rendering False statement index 0: rendering branch statement Token token:"),
-			newExpectingWriters("break", 1, "rendering if statement, rendering True statement index 0: rendering branch statement Token token:"),
+			newExpectingWriters("pass", 1, "rendering if statement False: statement index 0: rendering branch statement Token token:"),
+			newExpectingWriters("break", 1, "rendering if statement True: statement index 0: rendering branch statement Token token:"),
 			newExpectingWriters(" ", 1, "rendering if statement space:"),
 			newExpectingWriters(":", 2, "rendering if statement COLON token:"),
 			[]wantSetup{
@@ -1207,7 +1260,7 @@ func Test_writerFailureExpr(t *testing.T) {
 				},
 				{
 					writerSetup: newExpectingWriter("\n", 2, true),
-					wantErr:     "rendering if statement, rendering True statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 2",
+					wantErr:     "rendering if statement True: statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 2",
 				},
 				{
 					writerSetup: newExpectingWriter("\n", 3, true),
@@ -1215,18 +1268,43 @@ func Test_writerFailureExpr(t *testing.T) {
 				},
 				{
 					writerSetup: newExpectingWriter("\n", 4, true),
-					wantErr:     "rendering if statement, rendering False statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 4",
+					wantErr:     "rendering if statement False: statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 4",
 				},
 				{writerSetup: newExpectingWriter("\n", 5, false)},
 				{
-					writerSetup: newExpectingWriter("    ", 1, true),
-					wantErr:     "rendering if statement, rendering True statement index 0: rendering branch statement indent: AS EXPECTED: \"    \" occurence 1",
+					writerSetup: newExpectingWriter("+", 1, true),
+					wantErr:     "rendering if statement indent: AS EXPECTED: \"+\" occurence 1",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
 				},
 				{
-					writerSetup: newExpectingWriter("    ", 2, true),
-					wantErr:     "rendering if statement, rendering False statement index 0: rendering branch statement indent: AS EXPECTED: \"    \" occurence 2",
+					writerSetup: newExpectingWriter("+", 2, true),
+					wantErr:     "rendering if statement True: statement index 0: rendering branch statement indent: AS EXPECTED: \"+\" occurence 2",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
 				},
-				{writerSetup: newExpectingWriter("    ", 3, false)},
+				{
+					writerSetup: newExpectingWriter("+", 3, true),
+					wantErr:     "rendering if statement True: statement index 0: rendering branch statement indent: AS EXPECTED: \"+\" occurence 3",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+				{
+					writerSetup: newExpectingWriter("+", 4, true),
+					wantErr:     "rendering if statement indent: AS EXPECTED: \"+\" occurence 4",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+				{
+					writerSetup: newExpectingWriter("+", 5, true),
+					wantErr:     "rendering if statement False: statement index 0: rendering branch statement indent: AS EXPECTED: \"+\" occurence 5",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+				{
+					writerSetup: newExpectingWriter("+", 6, true),
+					wantErr:     "rendering if statement False: statement index 0: rendering branch statement indent: AS EXPECTED: \"+\" occurence 6",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+				{
+					writerSetup: newExpectingWriter("+", 7, false),
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
 			},
 		},
 		&syntax.LoadStmt{From: []*syntax.Ident{yIdent, fooIdent}, To: []*syntax.Ident{xIdent, {Name: "bar"}}, Module: &syntax.Literal{Value: "module"}}: {
@@ -1237,26 +1315,29 @@ func Test_writerFailureExpr(t *testing.T) {
 			newExpectingWriters(`"module"`, 1, "rendering load statement Module: rendering literal string value:"),
 			newExpectingWriters("load", 1, "rendering load statement LOAD token:"),
 			newExpectingWriters(" ", 2, "rendering load statement space:"),
+			newExpectingWriters(" ", 6, "rendering load statement space:", WithSpaceEqBinary(true)),
 			newExpectingWriters("=", 2, "rendering load statement EQ token:"),
+			newExpectingWriters("=", 2, "rendering load statement EQ token:", WithSpaceEqBinary(true)),
 			newExpectingWriters("(", 1, "rendering load statement LPAREN token:"),
 			newExpectingWriters(")", 1, "rendering load statement RPAREN token:"),
 			newExpectingWriters(",", 2, "rendering load statement COMMA token:"),
-			newExpectingWriters("\"", 4, "rendering load statement quote:"),
+			newExpectingWriters("\"", 4, "rendering load statement QUOTE token:"),
 			newExpectingWriters("\n", 1, "rendering load statement NEWLINE token:"),
+			newExpectingWriters("+", 1, "rendering load statement indent:", WithDepth(1), WithIndent("+")),
 		},
 		&syntax.ReturnStmt{Result: xIdent}: {
 			newExpectingWriters("x", 1, "rendering return statement Result: rendering ident Name:"),
 			newExpectingWriters("return", 1, "rendering return statement RETURN token:"),
 			newExpectingWriters(" ", 1, "rendering return statement space:"),
 			newExpectingWriters("\n", 1, "rendering return statement NEWLINE token:"),
+			newExpectingWriters("+", 1, "rendering return statement indent:", WithDepth(1), WithIndent("+")),
 		},
 		&syntax.WhileStmt{Cond: fooCond, Body: []syntax.Stmt{&syntax.BranchStmt{Token: syntax.PASS}}}: {
 			newExpectingWriters("while", 1, "rendering while statement WHILE token:"),
 			newExpectingWriters(" ", 1, "rendering while statement space:"),
 			newExpectingWriters("foo_cond", 1, "rendering while statement Cond: rendering ident Name:"),
 			newExpectingWriters(":", 1, "rendering while statement COLON token:"),
-			newExpectingWriters("    ", 1, "rendering while statement, rendering Body statement index 0: rendering branch statement indent:"),
-			newExpectingWriters("pass", 1, "rendering while statement, rendering Body statement index 0: rendering branch statement Token token:"),
+			newExpectingWriters("pass", 1, "rendering while statement Body: statement index 0: rendering branch statement Token token:"),
 			[]wantSetup{
 				{
 					writerSetup: newExpectingWriter("\n", 1, true),
@@ -1264,9 +1345,20 @@ func Test_writerFailureExpr(t *testing.T) {
 				},
 				{
 					writerSetup: newExpectingWriter("\n", 2, true),
-					wantErr:     "rendering while statement, rendering Body statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 2",
+					wantErr:     "rendering while statement Body: statement index 0: rendering branch statement NEWLINE token: AS EXPECTED: \"\\n\" occurence 2",
 				},
 				{writerSetup: newExpectingWriter("\n", 3, false)},
+				{
+					writerSetup: newExpectingWriter("+", 1, true),
+					wantErr:     "rendering while statement indent: AS EXPECTED: \"+\" occurence 1",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+				{
+					writerSetup: newExpectingWriter("+", 2, true),
+					wantErr:     "rendering while statement Body: statement index 0: rendering branch statement indent: AS EXPECTED: \"+\" occurence 2",
+					opts:        []Option{WithDepth(1), WithIndent("+")},
+				},
+				{writerSetup: newExpectingWriter("+", 3, false)},
 			},
 		},
 
