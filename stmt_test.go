@@ -1,6 +1,7 @@
 package starlarkgen
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -419,6 +420,64 @@ func Test_nilStmt(t *testing.T) {
 			}
 			if gotErr := err.Error(); gotErr != tt.wantErr {
 				t.Fatalf("expected error %q, got %q", tt.wantErr, gotErr)
+			}
+		})
+	}
+}
+
+func Benchmark_huge_encapsulation_stmt(b *testing.B) {
+	const numRanges = 5
+
+	ranges := make([]int, numRanges)
+	ranges[0] = 1
+	for i := 1; i < numRanges; i++ {
+		ranges[i] = ranges[i-1] * 10
+	}
+	var (
+		fooIdent   = &syntax.Ident{Name: "foo"}
+		barIdent   = &syntax.Ident{Name: "bar"}
+		fooLessBar = &syntax.BinaryExpr{Op: syntax.LT, X: fooIdent, Y: barIdent}
+		oneLiteral = &syntax.Literal{Value: 1}
+		tenLiteral = &syntax.Literal{Value: 10}
+	)
+	for _, num := range ranges {
+		var x syntax.Stmt = &syntax.BranchStmt{Token: syntax.PASS}
+		for i := 0; i < num; i++ {
+			x = &syntax.DefStmt{
+				Name:   barIdent,
+				Params: []syntax.Expr{fooIdent, barIdent},
+				Body: []syntax.Stmt{
+					&syntax.ExprStmt{X: oneLiteral},
+					&syntax.ExprStmt{X: tenLiteral},
+					&syntax.ExprStmt{X: &syntax.Literal{Value: "comment"}},
+					&syntax.IfStmt{Cond: fooLessBar,
+						True: []syntax.Stmt{
+							&syntax.ForStmt{Vars: barIdent, X: fooIdent, Body: []syntax.Stmt{
+								&syntax.ReturnStmt{Result: fooIdent},
+							}},
+						},
+						False: []syntax.Stmt{
+							&syntax.ReturnStmt{Result: barIdent},
+						},
+					},
+					&syntax.WhileStmt{
+						Cond: fooLessBar,
+						Body: []syntax.Stmt{
+							&syntax.LoadStmt{From: []*syntax.Ident{barIdent}, To: []*syntax.Ident{barIdent}, Module: &syntax.Literal{Value: "module"}},
+							&syntax.AssignStmt{LHS: barIdent, Op: syntax.EQ, RHS: fooIdent},
+							x,
+							&syntax.ReturnStmt{Result: barIdent},
+						},
+					},
+				},
+			}
+		}
+		b.Run(strconv.Itoa(num), func(b *testing.B) {
+			for tt := 0; tt < b.N; tt++ {
+				err := WriteStmt(&nilWriter{}, x)
+				if err != nil {
+					b.Fatalf("unexpected error: %v", err)
+				}
 			}
 		})
 	}
