@@ -1543,7 +1543,7 @@ func Benchmark_huge_encapsulation_expr(b *testing.B) {
 		barIdent   = &syntax.Ident{Name: "bar"}
 		fooLessBar = &syntax.BinaryExpr{Op: syntax.LT, X: fooIdent, Y: barIdent}
 		oneLiteral = &syntax.Literal{Value: 1}
-		tenLiteral = &syntax.Literal{Value: 10}
+		tenLiteral = &syntax.Literal{Value: "ten"}
 	)
 	for _, num := range ranges {
 		var x syntax.Expr = &syntax.ParenExpr{X: &syntax.Literal{Value: 1}}
