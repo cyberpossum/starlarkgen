@@ -956,8 +956,7 @@ func Test_writerFailureExpr(t *testing.T) {
 			newExpectingWriters(",", 3, "rendering call expression: COMMA token:", WithCallOption(CallOptionSingleLineComma)),
 			newExpectingWriters("\n", 4, "rendering call expression: NEWLINE token:", WithCallOption(CallOptionMultilineComma)),
 			newExpectingWriters("+", 3, "rendering call expression: indent:", WithCallOption(CallOptionMultilineComma), WithIndent("+")),
-			newExpectingWriters("++", 3, "rendering call expression: indent:", WithCallOption(CallOptionMultilineComma), WithIndent("+"), WithDepth(1)),
-			newExpectingWriters("+", 1, "rendering call expression: indent:", WithCallOption(CallOptionMultilineComma), WithIndent("+"), WithDepth(1)),
+			newExpectingWriters("+", 7, "rendering call expression: indent:", WithCallOption(CallOptionMultilineComma), WithIndent("+"), WithDepth(1)),
 		},
 		&syntax.Comprehension{
 			Body: fooIdent,
@@ -1024,8 +1023,7 @@ func Test_writerFailureExpr(t *testing.T) {
 			newExpectingWriters(",", 1, "rendering dict expression: COMMA token:", WithDictOption(DictOptionMultilineComma)),
 			newExpectingWriters("\n", 2, "rendering dict expression: NEWLINE token:", WithDictOption(DictOptionMultilineComma)),
 			newExpectingWriters("+", 1, "rendering dict expression: indent:", WithDictOption(DictOptionMultilineComma), WithIndent("+")),
-			newExpectingWriters("+", 1, "rendering dict expression: indent:", WithDictOption(DictOptionMultilineComma), WithDepth(1), WithIndent("+")),
-			newExpectingWriters("++", 1, "rendering dict expression: indent:", WithDictOption(DictOptionMultilineComma), WithDepth(1), WithIndent("+")),
+			newExpectingWriters("+", 3, "rendering dict expression: indent:", WithDictOption(DictOptionMultilineComma), WithDepth(1), WithIndent("+")),
 		},
 		&syntax.DotExpr{Name: yIdent, X: xIdent}: {
 			newExpectingWriters("y", 1, "rendering dot expression Name: rendering ident Name:"),
@@ -1063,8 +1061,7 @@ func Test_writerFailureExpr(t *testing.T) {
 			newExpectingWriters(",", 4, "rendering list expression: COMMA token:", WithListOption(ListOptionMultilineComma)),
 			newExpectingWriters("\n", 5, "rendering list expression: NEWLINE token:", WithListOption(ListOptionMultilineComma)),
 			newExpectingWriters("+", 4, "rendering list expression: indent:", WithListOption(ListOptionMultilineComma), WithIndent("+")),
-			newExpectingWriters("+", 1, "rendering list expression: indent:", WithListOption(ListOptionMultilineComma), WithIndent("+"), WithDepth(1)),
-			newExpectingWriters("++", 4, "rendering list expression: indent:", WithListOption(ListOptionMultilineComma), WithIndent("+"), WithDepth(1)),
+			newExpectingWriters("+", 9, "rendering list expression: indent:", WithListOption(ListOptionMultilineComma), WithIndent("+"), WithDepth(1)),
 		},
 		twentyLiteral: {
 			newExpectingWriters("20", 1, "rendering literal int value:"),
@@ -1113,8 +1110,7 @@ func Test_writerFailureExpr(t *testing.T) {
 			newExpectingWriters(",", 3, "rendering tuple expression: COMMA token:", WithTupleOption(TupleOptionMultilineMultipleComma)),
 			newExpectingWriters("\n", 4, "rendering tuple expression: NEWLINE token:", WithTupleOption(TupleOptionMultilineMultipleComma)),
 			newExpectingWriters("+", 3, "rendering tuple expression: indent:", WithTupleOption(TupleOptionMultilineMultipleComma), WithIndent("+")),
-			newExpectingWriters("+", 1, "rendering tuple expression: indent:", WithTupleOption(TupleOptionMultilineMultipleComma), WithIndent("+"), WithDepth(1)),
-			newExpectingWriters("++", 3, "rendering tuple expression: indent:", WithTupleOption(TupleOptionMultilineMultipleComma), WithIndent("+"), WithDepth(1)),
+			newExpectingWriters("+", 7, "rendering tuple expression: indent:", WithTupleOption(TupleOptionMultilineMultipleComma), WithIndent("+"), WithDepth(1)),
 		},
 		&syntax.UnaryExpr{Op: syntax.MINUS, X: xIdent}: {
 			newExpectingWriters("-", 1, "rendering unary expression, writing \"-\" token:"),

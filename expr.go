@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"strings"
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
@@ -23,6 +22,16 @@ const (
 	sepCommaSpace
 	sepCommaNewlineIndent
 )
+
+func writeRepeat(out io.StringWriter, source string, n int) error {
+	for i := 0; i < n; i++ {
+		if _, err := out.WriteString(source); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 func exprSequence(out io.StringWriter, source []syntax.Expr, ro renderOption, opts *outputOpts) error {
 	var (
@@ -50,7 +59,7 @@ func exprSequence(out io.StringWriter, source []syntax.Expr, ro renderOption, op
 		if _, err := out.WriteString(newline); err != nil {
 			return fmt.Errorf("NEWLINE token: %w", err)
 		}
-		if _, err := out.WriteString(strings.Repeat(opts.indent, expOpts.depth)); err != nil {
+		if err := writeRepeat(out, expOpts.indent, expOpts.depth); err != nil {
 			return fmt.Errorf("indent: %w", err)
 		}
 	}
@@ -72,7 +81,7 @@ func exprSequence(out io.StringWriter, source []syntax.Expr, ro renderOption, op
 			if _, err := out.WriteString(newline); err != nil {
 				return fmt.Errorf("NEWLINE token: %w", err)
 			}
-			if _, err := out.WriteString(strings.Repeat(opts.indent, expOpts.depth)); err != nil {
+			if err := writeRepeat(out, expOpts.indent, expOpts.depth); err != nil {
 				return fmt.Errorf("indent: %w", err)
 			}
 		}
@@ -100,7 +109,7 @@ func exprSequence(out io.StringWriter, source []syntax.Expr, ro renderOption, op
 		if _, err := out.WriteString(newline); err != nil {
 			return fmt.Errorf("NEWLINE token: %w", err)
 		}
-		if _, err := out.WriteString(strings.Repeat(opts.indent, opts.depth)); err != nil {
+		if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
 			return fmt.Errorf("indent: %w", err)
 		}
 	}
