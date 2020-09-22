@@ -410,7 +410,7 @@ func Test_nilStmt(t *testing.T) {
 				}
 			}()
 			var sb strings.Builder
-			err := stmt(&sb, tt.input, &defaultOpts)
+			err := stmt(&sb, tt.input, defaultOpts.copy())
 
 			if gotText := sb.String(); !tt.wantNonEmpty && gotText != "" {
 				t.Fatalf("empty output expected, got %q", gotText)

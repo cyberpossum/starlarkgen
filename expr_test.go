@@ -1415,6 +1415,20 @@ func Test_writerFailureExpr(t *testing.T) {
 	}
 }
 
+func Test_ensureLiteralsDefault(t *testing.T) {
+	// check that the original DefaultOpts nil buffer is not mutated
+	s := &syntax.ListExpr{}
+	for i := 0; i < 100; i++ {
+		s.List = append(s.List, &syntax.Literal{Value: strings.Repeat("a", i+1)})
+	}
+	if err := WriteExpr(&nilWriter{}, s); err != nil {
+		t.Fatal(err)
+	}
+	if defaultOpts.stringBuffer != nil {
+		t.Fatal("mutated default buffer")
+	}
+}
+
 func Test_nilExpr(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -1515,7 +1529,7 @@ func Test_nilExpr(t *testing.T) {
 				}
 			}()
 			var sb strings.Builder
-			err := expr(&sb, tt.input, &defaultOpts)
+			err := expr(&sb, tt.input, defaultOpts.copy())
 
 			if gotText := sb.String(); !tt.wantNonEmpty && gotText != "" {
 				t.Fatalf("empty output expected, got %q", gotText)
