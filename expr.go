@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"strconv"
+	"unsafe"
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
@@ -412,7 +414,24 @@ func literal(out io.StringWriter, input *syntax.Literal, opts *outputOpts) error
 
 	switch t := input.Value.(type) {
 	case string:
-		if _, err := out.WriteString(starlark.String(t).String()); err != nil {
+		// starlark.String(...).String() uses strconv.Quote, which performs
+		// additional allocations.
+		//
+		// Use a pre-allocated buffer to quote-escape the string, and an
+		// unsafe.Pointer trick from strings.Builder to avoid allocation
+		// when converting the byte slice to string.
+
+		// check if the capacity is enough
+		if cap(opts.stringBuffer) < len(t)*2 {
+			opts.stringBuffer = make([]byte, 0, len(t)*3)
+		} else {
+			// reset the length if needed
+			if len(opts.stringBuffer) > 0 {
+				opts.stringBuffer = opts.stringBuffer[:0]
+			}
+		}
+		opts.stringBuffer = strconv.AppendQuote(opts.stringBuffer, t)
+		if _, err := out.WriteString(*(*string)(unsafe.Pointer(&opts.stringBuffer))); err != nil {
 			return fmt.Errorf("rendering literal string value: %w", err)
 		}
 		return nil

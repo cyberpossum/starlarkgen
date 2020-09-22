@@ -8,6 +8,18 @@ import (
 	"go.starlark.net/syntax"
 )
 
+func Test_addDepth(t *testing.T) {
+	const wantCap = 100
+
+	opts := defaultOpts.copy()
+	opts.stringBuffer = make([]byte, 0, wantCap)
+
+	copyOpts := opts.addDepth(1)
+	if gotCap := cap(copyOpts.stringBuffer); gotCap != wantCap {
+		t.Fatalf("expected buffer of capacity %d, got %d", wantCap, gotCap)
+	}
+}
+
 func Test_getOutputOpts(t *testing.T) {
 	tests := []struct {
 		name    string

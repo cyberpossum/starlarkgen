@@ -15,6 +15,7 @@ const (
 )
 
 type outputOpts struct {
+	// options
 	depth         int
 	indent        string
 	spaceEqBinary bool
@@ -22,6 +23,9 @@ type outputOpts struct {
 	listOption    ListOption
 	callOption    CallOption
 	tupleOption   TupleOption
+
+	// runtime helpers
+	stringBuffer []byte
 }
 
 // copy the options, will panic on nil argument
@@ -291,7 +295,7 @@ func WithTupleOption(value TupleOption) Option {
 
 func getOutputOpts(options ...Option) (*outputOpts, error) {
 	var (
-		opts = &defaultOpts
+		opts = defaultOpts.copy()
 		err  error
 	)
 	for _, o := range options {

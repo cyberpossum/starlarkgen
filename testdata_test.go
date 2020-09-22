@@ -1,6 +1,8 @@
 package starlarkgen
 
 import (
+	"fmt"
+	"io"
 	"io/ioutil"
 	"strings"
 	"testing"
@@ -54,6 +56,7 @@ func Test_testdata(t *testing.T) {
 func Benchmark_testData(b *testing.B) {
 	var (
 		sourceMap = make(map[string]*syntax.File, len(testSources))
+		w         io.StringWriter
 		err       error
 	)
 	// pre-parse the source files to exclude from benchmark wall clock time
@@ -63,17 +66,23 @@ func Benchmark_testData(b *testing.B) {
 			b.Fatal("error parsing test file", err)
 		}
 	}
-	for sf, opts := range testSources {
-		b.Run(sf, func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				for _, s := range sourceMap[sf].Stmts {
-					_, err := StarlarkStmt(s, opts...)
-
-					if err != nil {
-						b.Fatal("error processing statement", err)
+	for _, realBuffer := range []bool{false, true} {
+		for sf, opts := range testSources {
+			if realBuffer {
+				w = &strings.Builder{}
+			} else {
+				w = &nilWriter{}
+			}
+			b.Run(fmt.Sprintf("%s, real StringBuiler: %v", sf, realBuffer), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					for _, s := range sourceMap[sf].Stmts {
+						err := WriteStmt(w, s, opts...)
+						if err != nil {
+							b.Fatal("error processing statement", err)
+						}
 					}
 				}
-			}
-		})
+			})
+		}
 	}
 }
