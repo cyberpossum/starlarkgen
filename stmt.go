@@ -1,10 +1,12 @@
 package starlarkgen
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
+	"unsafe"
 
 	"go.starlark.net/syntax"
 )
@@ -23,11 +25,11 @@ func stmtSequence(out io.StringWriter, input []syntax.Stmt, opts *outputOpts) er
 	return nil
 }
 
-func hasSpacePrefix(s string, l int) bool {
-	if len(s) < l {
+func hasSpacePrefix(buf []byte, l int) bool {
+	if len(buf) < l {
 		return false
 	}
-	for i, r := range s {
+	for i, r := range buf {
 		if i == l {
 			return true
 		}
@@ -146,10 +148,10 @@ func docstring(out io.StringWriter, input *syntax.Literal, strValue string, opts
 	var stripPrefix int32
 
 	if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
-		return fmt.Errorf("rendering expression statement indent: %w", err)
+		return fmt.Errorf("rendering docstring expression statement indent: %w", err)
 	}
 	if _, err := out.WriteString(tripleQuote); err != nil {
-		return fmt.Errorf("rendering expression statement TRIPLE QUOTE token: %w", err)
+		return fmt.Errorf("rendering docstring expression statement TRIPLE QUOTE token: %w", err)
 	}
 
 	// .Col value is 1-based
@@ -157,40 +159,77 @@ func docstring(out io.StringWriter, input *syntax.Literal, strValue string, opts
 		stripPrefix = input.TokenPos.Col - 1
 	}
 
-	lines := strings.Split(strings.ReplaceAll(strValue, `"""`, `\"\"\"`), "\n")
-
-	if _, err := out.WriteString(lines[0]); err != nil {
-		return fmt.Errorf("rendering expression statement: docstring line 1: %w", err)
+	if cap(opts.stringBuffer) < len(strValue)*2 {
+		opts.stringBuffer = make([]byte, 0, len(strValue)*3)
+	} else {
+		// reset the length if needed
+		if len(opts.stringBuffer) > 0 {
+			opts.stringBuffer = opts.stringBuffer[:0]
+		}
+	}
+	for i := 0; i < len(strValue); i++ {
+		if i <= len(strValue)-3 {
+			if b := strValue[i : i+3]; b == `"""` {
+				opts.stringBuffer = append(opts.stringBuffer, `\"\"\"`...)
+				i += 2
+				continue
+			}
+		}
+		opts.stringBuffer = append(opts.stringBuffer, strValue[i])
 	}
 
-	for i := 1; i < len(lines); i++ {
-		line := lines[i]
-		if stripPrefix > 0 && hasSpacePrefix(line, int(stripPrefix)) {
-			line = line[stripPrefix:]
-		}
-		if len(line) > 0 || i == len(lines)-1 {
-			if _, err := out.WriteString(newline); err != nil {
-				return fmt.Errorf("rendering expression statement NEWLINE token: %w", err)
-			}
-			if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
-				return fmt.Errorf("rendering expression statement indent: %w", err)
-			}
-			if _, err := out.WriteString(line); err != nil {
-				return fmt.Errorf("rendering expression statement: docstring line %d: %w", i+1, err)
-			}
+	var lineNum int
+
+	for pos := 0; pos < len(opts.stringBuffer); {
+		var buf []byte
+		// do not use bufio.Scanner to avoid extra 4kb allocation
+		if i := bytes.IndexByte(opts.stringBuffer[pos:], '\n'); i >= 0 {
+			buf = opts.stringBuffer[pos : pos+i]
+			pos += i + 1
 		} else {
-			// do not add extra indent spaces for empty doc lines, unless it's a last one
-			if _, err := out.WriteString(newline); err != nil {
-				return fmt.Errorf("rendering expression statement NEWLINE token: %w", err)
+			buf = opts.stringBuffer[pos:]
+			pos = len(opts.stringBuffer)
+		}
+
+		if lineNum == 0 {
+			if _, err := out.WriteString(*(*string)(unsafe.Pointer(&buf))); err != nil {
+				return fmt.Errorf("rendering docstring expression statement: docstring line 1: %w", err)
 			}
+			lineNum++
+			continue
+		}
+		if stripPrefix > 0 && hasSpacePrefix(buf, int(stripPrefix)) {
+			buf = buf[stripPrefix:]
+		}
+
+		if _, err := out.WriteString(newline); err != nil {
+			return fmt.Errorf("rendering docstring expression statement NEWLINE token: %w", err)
+		}
+		if len(buf) > 0 || pos >= len(opts.stringBuffer) {
+			if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+				return fmt.Errorf("rendering docstring expression statement indent: %w", err)
+			}
+			if _, err := out.WriteString(*(*string)(unsafe.Pointer(&buf))); err != nil {
+				return fmt.Errorf("rendering docstring expression statement: docstring line %d: %w", lineNum+1, err)
+			}
+		}
+		lineNum++
+	}
+	// if the last line is empty, still write the indent
+	if len(opts.stringBuffer) > 0 && opts.stringBuffer[len(opts.stringBuffer)-1] == '\n' {
+		if _, err := out.WriteString(newline); err != nil {
+			return fmt.Errorf("rendering docstring expression statement NEWLINE token: %w", err)
+		}
+		if err := writeRepeat(out, opts.indent, opts.depth); err != nil {
+			return fmt.Errorf("rendering docstring expression statement indent: %w", err)
 		}
 	}
 
 	if _, err := out.WriteString(tripleQuote); err != nil {
-		return fmt.Errorf("rendering expression statement TRIPLE QUOTE token: %w", err)
+		return fmt.Errorf("rendering docstring expression statement TRIPLE QUOTE token: %w", err)
 	}
 	if _, err := out.WriteString(newline); err != nil {
-		return fmt.Errorf("rendering expression statement NEWLINE token: %w", err)
+		return fmt.Errorf("rendering docstring expression statement NEWLINE token: %w", err)
 	}
 
 	return nil

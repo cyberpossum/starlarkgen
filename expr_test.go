@@ -1196,7 +1196,20 @@ func Test_writerFailureExpr(t *testing.T) {
 		},
 		&syntax.ExprStmt{X: xIdent}: {
 			newExpectingWriters("x", 1, "rendering expression statement X: rendering ident Name:"),
+			newExpectingWriters("\n", 1, "rendering expression statement NEWLINE token:"),
 			newExpectingWriters("+", 1, "rendering expression statement indent:", WithDepth(1), WithIndent("+")),
+		},
+		&syntax.ExprStmt{X: &syntax.Literal{
+			Value:    "test\n    foo\n\n\n    bar\n",
+			TokenPos: syntax.Position{Col: 5, Line: 2},
+			Token:    syntax.STRING,
+		}}: {
+			newExpectingWriters("\"\"\"", 2, "rendering docstring expression statement TRIPLE QUOTE token:"),
+			newExpectingWriters("test", 1, "rendering docstring expression statement: docstring line 1:"),
+			newExpectingWriters("foo", 1, "rendering docstring expression statement: docstring line 2:"),
+			newExpectingWriters("bar", 1, "rendering docstring expression statement: docstring line 5:"),
+			newExpectingWriters("\n", 6, "rendering docstring expression statement NEWLINE token:"),
+			newExpectingWriters("+", 4, "rendering docstring expression statement indent:", WithDepth(1), WithIndent("+")),
 		},
 		&syntax.ForStmt{X: xIdent, Vars: yIdent, Body: []syntax.Stmt{
 			&syntax.BranchStmt{Token: syntax.PASS},
