@@ -131,6 +131,11 @@ func Test_stmt(t *testing.T) {
 			want:          `"""foo bar test \"\"\""""` + "\n",
 		},
 		{
+			name:          "expression statement, single-line docstring with triple quotes inside in the middle",
+			inputExprStmt: &syntax.ExprStmt{X: &syntax.Literal{Value: "foo bar \"\"\" test"}},
+			want:          `"""foo bar \"\"\" test"""` + "\n",
+		},
+		{
 			name:          "expression statement, multi-line docstring",
 			inputExprStmt: &syntax.ExprStmt{X: &syntax.Literal{Value: "foo bar test\ntest foo bar\ntest"}},
 			want:          `    """foo bar test` + "\n" + `    test foo bar` + "\n" + `    test"""` + "\n",
@@ -142,11 +147,11 @@ func Test_stmt(t *testing.T) {
 				X: &syntax.Literal{
 					Token:    syntax.STRING,
 					TokenPos: syntax.Position{Col: 17, Line: 2},
-					Value:    "some comment\n\n\n                more comment\n                ",
+					Value:    "some comment\n\n\n                more comment\n                even more comment\n                ",
 				},
 			},
 			opts: []Option{WithDepth(1)},
-			want: `    """some comment` + "\n\n\n" + `    more comment` + "\n" + `    """` + "\n",
+			want: `    """some comment` + "\n\n\n" + `    more comment` + "\n" + `    even more comment` + "\n" + `    """` + "\n",
 		},
 		{
 			name: "for statement",
@@ -478,6 +483,53 @@ func Benchmark_huge_encapsulation_stmt(b *testing.B) {
 				if err != nil {
 					b.Fatalf("unexpected error: %v", err)
 				}
+			}
+		})
+	}
+}
+
+func Test_hasSpacePrefix(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		l      int
+		want   bool
+	}{
+		{
+			name:   "no spaces, 0 length",
+			l:      0,
+			source: "foo",
+			want:   true,
+		},
+		{
+			name:   "no spaces, >0 length",
+			l:      2,
+			source: "foo",
+			want:   false,
+		},
+		{
+			name:   "equal space count",
+			l:      2,
+			source: "  foo",
+			want:   true,
+		},
+		{
+			name:   "more spaces than expected",
+			l:      2,
+			source: "   foo",
+			want:   true,
+		},
+		{
+			name:   "less spaces than expected",
+			l:      2,
+			source: " foo",
+			want:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasSpacePrefix([]byte(tt.source), tt.l); got != tt.want {
+				t.Errorf("hasSpacePrefix() = %v, want %v", got, tt.want)
 			}
 		})
 	}
